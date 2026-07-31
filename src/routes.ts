@@ -13,10 +13,11 @@
  * (`inconclusive`).
  */
 
+import { StrKey } from '@stellar/stellar-sdk';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ServerDependencies } from './index.js';
 import { validateAndNormalize, acceptSubmission, type SubmissionRequest } from './ingest.js';
-import { normalizeWasmHashHex } from './resolve.js';
+import { normalizeWasmHashHex, RpcError } from './resolve.js';
 import { verifyResultRecord, type SignedResultRecord } from './sign.js';
 import type { VerificationStatus } from './compare.js';
 import type { ResultStatus, VerificationResult } from './db.js';
@@ -93,6 +94,13 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDependencies): 
     });
   });
 
+  app.get<{ Params: { contractId: string } }>(
+    '/verifications/by-contract/:contractId',
+    async (request, reply) => {
+      return handleVerificationsByContract(app, deps, request.params.contractId, reply);
+    },
+  );
+
   app.get<{ Params: { wasmHash: string } }>('/verifications/:wasmHash', async (request, reply) => {
     return handleVerifications(app, deps, request.params.wasmHash, reply);
   });
@@ -134,7 +142,69 @@ async function handleVerifications(
       .code(400)
       .send({ error: { code: 'validation_failed', message: 'wasmHash must be a 32-byte hex or base64 value' } });
   }
+  return reply.send(await buildVerificationsEnvelope(app, deps, wasmHash));
+}
 
+/** Shared envelope shape served by both verification read endpoints. */
+interface VerificationEnvelope {
+  wasmHash: string;
+  status: VerificationStatus;
+  results: PublicResult[];
+  sources: { sha256: string; url: string }[];
+}
+
+/**
+ * Serve the signed verification results for a contract ID. The deployed wasm
+ * hash is resolved through the shared Resolver — the same code path the
+ * submission queue uses — so there is no second RPC implementation.
+ *
+ * A well-formed ID with no deployed contract behind it is a 404 (never a 200
+ * with an empty envelope, which would be indistinguishable from "resolved but
+ * genuinely unverified"). A transient upstream RPC failure (timeout, SDK
+ * error) is deliberately a 502: the contract may exist, so 404 would lie.
+ */
+async function handleVerificationsByContract(
+  app: FastifyInstance,
+  deps: ServerDependencies,
+  contractId: string,
+  reply: FastifyReply,
+): Promise<FastifyReply> {
+  if (!StrKey.isValidContract(contractId)) {
+    return reply
+      .code(400)
+      .send({ error: { code: 'validation_failed', message: 'contractId must be a valid C-address (StrKey contract id)' } });
+  }
+
+  let wasmHash: string;
+  try {
+    wasmHash = await deps.resolver.resolveWasmHash(contractId);
+  } catch (err) {
+    if (err instanceof RpcError && err.kind === 'not_found') {
+      // Well-formed ID but no deployed contract behind it: a 404, never a
+      // 200 with an empty envelope — that would be indistinguishable from
+      // "resolved but genuinely unverified".
+      return reply
+        .code(404)
+        .send({ error: { code: 'not_found', message: `contract ${contractId} is not deployed on the network` } });
+    }
+    app.log.warn({ err, contractId }, 'by-contract resolution failed');
+    return reply
+      .code(502)
+      .send({ error: { code: 'rpc_error', message: 'could not resolve contract via Soroban RPC' } });
+  }
+  return reply.send(await buildVerificationsEnvelope(app, deps, wasmHash));
+}
+
+/**
+ * Build the envelope for a wasm hash, shared by GET /verifications/:wasmHash
+ * and GET /verifications/by-contract/:contractId so consumers get an
+ * identical response shape regardless of which endpoint they call.
+ */
+async function buildVerificationsEnvelope(
+  app: FastifyInstance,
+  deps: ServerDependencies,
+  wasmHash: string,
+): Promise<VerificationEnvelope> {
   const [localResults, peerResults, submission] = await Promise.all([
     deps.database.getResultsByWasmHash(wasmHash),
     fetchPeerResults(app, deps, wasmHash),
@@ -157,7 +227,7 @@ async function handleVerifications(
     ),
   ].map((sha256) => ({ sha256, url: `/sources/${sha256}` }));
 
-  return reply.send({ wasmHash, status, results, sources });
+  return { wasmHash, status, results, sources };
 }
 
 /**

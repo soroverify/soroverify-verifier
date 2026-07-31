@@ -1,0 +1,221 @@
+/**
+ * Read-only verifications endpoint tests.
+ *
+ * Exercises GET /verifications/:wasmHash and GET
+ * /verifications/by-contract/:contractId through the real Fastify routing
+ * with an in-memory database fake and no live RPC.
+ *
+ * The contract -> wasm lookup is performed by a real Resolver instance behind
+ * a spy. Asserting the spy is invoked (with the contract ID) is the
+ * code-level proof that the by-contract route shares the resolution logic in
+ * src/resolve.ts — the same function the submission queue uses — instead of
+ * duplicating an RPC implementation.
+ */
+import { randomBytes, randomUUID } from 'node:crypto';
+import { StrKey } from '@stellar/stellar-sdk';
+import type { FastifyInstance } from 'fastify';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Database, Submission, VerificationResult } from '../src/db.js';
+import { buildServer, type ServerDependencies } from '../src/index.js';
+import { Resolver, RpcError } from '../src/resolve.js';
+import { ContentStore } from '../src/store.js';
+
+/** Syntactically valid contract id (checked against the same gate the route uses). */
+const VALID_CONTRACT = StrKey.encodeContract(randomBytes(32));
+const WASM_HASH = randomBytes(32).toString('hex');
+const SOURCE_REPO = 'https://github.com/example/contract.git';
+const TARBALL_SHA256 = randomBytes(32).toString('hex');
+
+function resultFixture(overrides: Partial<VerificationResult> = {}): VerificationResult {
+  const now = new Date();
+  return {
+    id: randomUUID(),
+    wasmHash: WASM_HASH,
+    sourceRepo: SOURCE_REPO,
+    sourceRev: 'main',
+    status: 'verified',
+    buildMeta: { bldimg: 'example/build@sha256:abc' },
+    verifierId: 'a1b2c3d4e5f60718',
+    publicKey: 'base64-public-key',
+    timestamp: '2026-07-01T12:00:00.000Z',
+    signature: 'base64-signature',
+    tarballSha256: TARBALL_SHA256,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+/** In-memory Database stand-in covering only what the read endpoints touch. */
+class FakeDatabase {
+  readonly calls: string[] = [];
+  private results: VerificationResult[] = [];
+  private submission: Submission | null = null;
+
+  setResults(results: VerificationResult[]): void {
+    this.results = results;
+  }
+
+  async getResultsByWasmHash(wasmHash: string): Promise<VerificationResult[]> {
+    this.calls.push('getResultsByWasmHash');
+    return this.results.filter((result) => result.wasmHash === wasmHash);
+  }
+
+  async getSubmissionByWasmHash(): Promise<Submission | null> {
+    this.calls.push('getSubmissionByWasmHash');
+    return this.submission;
+  }
+
+  async close(): Promise<void> {}
+}
+
+// A real Resolver, so the shared resolve.ts code path is under test. The RPC
+// URL is deliberately unreachable: every test either stubs resolveWasmHash or
+// never reaches it, so an unspied call would fail loudly instead of passing.
+const resolver = new Resolver({ rpcUrl: 'https://rpc.invalid' });
+const resolveSpy = vi.spyOn(resolver, 'resolveWasmHash');
+
+let app: FastifyInstance;
+let db: FakeDatabase;
+
+beforeAll(() => {
+  db = new FakeDatabase();
+  const deps: ServerDependencies = {
+    database: db as unknown as Database,
+    store: new ContentStore('/tmp/soroverify-routes-test-store'),
+    resolver,
+    peerVerifiers: [],
+  };
+  app = buildServer({ host: '127.0.0.1', port: 0, loggerEnabled: false }, deps);
+});
+
+beforeEach(() => {
+  db.calls.length = 0;
+  db.setResults([]);
+  resolveSpy.mockClear();
+});
+
+afterAll(async () => {
+  await app.close();
+});
+
+describe('GET /verifications/:wasmHash', () => {
+  it('returns the envelope with results, aggregate status, and sources', async () => {
+    db.setResults([resultFixture()]);
+    const response = await app.inject({ method: 'GET', url: `/verifications/${WASM_HASH}` });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      wasmHash: string;
+      status: string;
+      results: unknown[];
+      sources: { sha256: string; url: string }[];
+    };
+    expect(body.wasmHash).toBe(WASM_HASH);
+    expect(body.status).toBe('verified');
+    expect(body.results).toHaveLength(1);
+    expect(body.sources).toEqual([{ sha256: TARBALL_SHA256, url: `/sources/${TARBALL_SHA256}` }]);
+  });
+
+  it('rejects a malformed wasm hash with 400', async () => {
+    const response = await app.inject({ method: 'GET', url: '/verifications/not-a-hash' });
+    expect(response.statusCode).toBe(400);
+    const body = response.json() as { error: { code: string } };
+    expect(body.error.code).toBe('validation_failed');
+  });
+});
+
+describe('GET /verifications/by-contract/:contractId', () => {
+  describe('malformed contract ID', () => {
+    const cases: [string, string][] = [
+      [
+        'wrong prefix (valid G-address, not a contract)',
+        StrKey.encodeEd25519PublicKey(randomBytes(32)),
+      ],
+      ['wrong prefix (unknown C-variant)', 'X'.repeat(56)],
+      ['too short', 'C'.repeat(20)],
+      ['invalid characters (0 is not base32)', `C${'0'.repeat(55)}`],
+    ];
+
+    it.each(cases)('rejects %s with 400 before any RPC call', async (_label, contractId) => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/verifications/by-contract/${contractId}`,
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { error: { code: string } };
+      expect(body.error.code).toBe('validation_failed');
+      // Rejected before touching RPC or the database.
+      expect(resolveSpy).not.toHaveBeenCalled();
+      expect(db.calls).toEqual([]);
+    });
+  });
+
+  it('returns the same envelope as the wasm-hash endpoint with correct data', async () => {
+    db.setResults([resultFixture()]);
+    resolveSpy.mockResolvedValueOnce(WASM_HASH);
+
+    const byContract = await app.inject({
+      method: 'GET',
+      url: `/verifications/by-contract/${VALID_CONTRACT}`,
+    });
+    const byHash = await app.inject({ method: 'GET', url: `/verifications/${WASM_HASH}` });
+
+    expect(byContract.statusCode).toBe(200);
+    expect(byHash.statusCode).toBe(200);
+    // Identical response shape regardless of which endpoint was called.
+    expect(byContract.json()).toEqual(byHash.json());
+
+    const body = byContract.json() as {
+      wasmHash: string;
+      status: string;
+      results: Array<Record<string, unknown>>;
+      sources: { sha256: string; url: string }[];
+    };
+    expect(body.wasmHash).toBe(WASM_HASH);
+    expect(body.status).toBe('verified');
+    expect(body.results).toEqual([
+      expect.objectContaining({
+        wasm_hash: WASM_HASH,
+        source_repo: SOURCE_REPO,
+        source_rev: 'main',
+        status: 'verified',
+        verifier_id: 'a1b2c3d4e5f60718',
+        signature: 'base64-signature',
+        tarball_sha256: TARBALL_SHA256,
+      }),
+    ]);
+    expect(body.sources).toEqual([{ sha256: TARBALL_SHA256, url: `/sources/${TARBALL_SHA256}` }]);
+  });
+
+  it('resolves the wasm hash through the shared Resolver, not a parallel implementation', async () => {
+    // Code-level check: the handler must call the injected
+    // Resolver.resolveWasmHash — the same function the submission queue uses.
+    // The spy wraps a real Resolver instance, so this only passes if the route
+    // shares resolve.ts: a duplicated RPC implementation would never hit the
+    // spy and would fail against the deliberately unreachable RPC URL.
+    resolveSpy.mockResolvedValueOnce(WASM_HASH);
+    const response = await app.inject({
+      method: 'GET',
+      url: `/verifications/by-contract/${VALID_CONTRACT}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(resolveSpy).toHaveBeenCalledTimes(1);
+    expect(resolveSpy).toHaveBeenCalledWith(VALID_CONTRACT);
+  });
+
+  it('returns 404 for a well-formed contract that is not deployed', async () => {
+    resolveSpy.mockRejectedValueOnce(
+      new RpcError('not_found', 'contract not found on the network'),
+    );
+    const response = await app.inject({
+      method: 'GET',
+      url: `/verifications/by-contract/${VALID_CONTRACT}`,
+    });
+    expect(response.statusCode).toBe(404);
+    const body = response.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('not_found');
+    expect(body.error.message).toContain(VALID_CONTRACT);
+    // A missing contract is a 404, never a 200 with an empty envelope.
+    expect(db.calls).toEqual([]);
+  });
+});
