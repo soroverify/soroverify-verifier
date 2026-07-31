@@ -155,8 +155,17 @@ async function main(): Promise<void> {
   };
   const runner = new JobRunner(runnerConfig);
 
+  // Lease-timeout reaper: reclaims rows left 'running' by a dead or hung
+  // worker. Runs on its own fixed interval, independently of the poll loop,
+  // so a crash in one never starves the other.
+  const REAPER_INTERVAL_MS = 60 * 1000;
+  let reaperTimer: NodeJS.Timeout | undefined;
+
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'shutting down');
+    if (reaperTimer !== undefined) {
+      clearInterval(reaperTimer);
+    }
     await runner.stop();
     await app.close();
     await database.close();
@@ -168,6 +177,10 @@ async function main(): Promise<void> {
   try {
     await app.listen({ host: config.host, port: config.port });
     runner.start();
+    reaperTimer = setInterval(() => {
+      // reclaimStuckJobs swallows its own errors; no unhandled rejection.
+      void runner.reclaimStuckJobs();
+    }, REAPER_INTERVAL_MS);
   } catch (err) {
     app.log.error(err);
     await database.close();

@@ -333,6 +333,39 @@ export class Database {
   }
 
   /**
+   * Reclaim submission rows left 'running' past the lease timeout (e.g. a
+   * worker process died mid-job). Each stale row is reset to 'inconclusive'
+   * with its attempt counter bumped — the retry budget (attempts <
+   * max_attempts) then still bounds how many times a genuinely stuck job can
+   * be reclaimed. Returns the reclaimed ids with how long each had been
+   * stuck, in seconds, for structured logging. FOR UPDATE SKIP LOCKED keeps
+   * multiple reaper instances (workers sharing a database) from reclaiming
+   * the same row twice.
+   */
+  async reclaimStuckJobs(staleBefore: Date): Promise<{ id: string; stuckSeconds: number }[]> {
+    const result = await this.pool.query<{ id: string; stuck_seconds: number }>(
+      // MATERIALIZED: Postgres would otherwise inline the single-reference
+      // CTE, which can change FOR UPDATE SKIP LOCKED semantics and the
+      // pre-update updated_at read in RETURNING.
+      `WITH stale AS MATERIALIZED (
+          SELECT id, updated_at
+            FROM submissions
+           WHERE status = 'running' AND updated_at < $1
+           FOR UPDATE SKIP LOCKED
+       )
+       UPDATE submissions s
+          SET status = 'inconclusive',
+              attempts = attempts + 1,
+              updated_at = now()
+         FROM stale
+        WHERE s.id = stale.id
+        RETURNING s.id, EXTRACT(EPOCH FROM (now() - stale.updated_at))::int AS stuck_seconds`,
+      [staleBefore],
+    );
+    return result.rows.map((row) => ({ id: row.id, stuckSeconds: row.stuck_seconds }));
+  }
+
+  /**
    * Upsert a signed result record keyed by (wasm_hash, verifier_id), keeping
    * each verifier's most recent result for a hash.
    */

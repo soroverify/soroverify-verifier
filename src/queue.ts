@@ -16,6 +16,11 @@
  *
  * The runner never lets a job failure crash the loop; every unexpected error
  * is caught, logged, and retried as inconclusive.
+ *
+ * A lease-timeout reaper (reclaimStuckJobs, driven from index.ts on its own
+ * fixed interval) rescues rows left 'running' by a dead or hung worker: they
+ * are reset to 'inconclusive' with their attempt counter bumped, so they go
+ * back on the queue and the retry budget still bounds reclamation.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -85,6 +90,37 @@ export class JobRunner {
     this.stopped = true;
     while (this.inFlight > 0) {
       await sleep(100);
+    }
+  }
+
+  /**
+   * Lease-timeout reaper, called on a fixed interval from index.ts
+   * independently of the poll loop. Any row left 'running' past the rebuild
+   * container's hard wall-clock limit (plus a grace margin) means the worker
+   * that claimed it died or hung, so it is reset to 'inconclusive' with its
+   * attempt counter bumped and becomes claimable again. Each reclaimed job is
+   * logged at warn. Sweep failures are logged and never crash the interval.
+   */
+  async reclaimStuckJobs(): Promise<void> {
+    try {
+      // The longest a healthy job can hold 'running' without touching
+      // updated_at is the max of the fetch window (fetch runs before
+      // setTarballSha256 refreshes the row) and the rebuild window (the build
+      // itself, which is killed at buildTimeoutMs). Reclaiming anything older
+      // plus a grace margin is safe against false positives.
+      const buildTimeoutMs = this.config.rebuildConfig.buildTimeoutMs ?? 10 * 60 * 1000;
+      const fetchTimeoutMs = this.config.fetchTimeoutMs ?? 5 * 60 * 1000;
+      const graceMs = 2 * 60 * 1000;
+      const staleBefore = new Date(Date.now() - (Math.max(buildTimeoutMs, fetchTimeoutMs) + graceMs));
+      const reclaimed = await this.config.database.reclaimStuckJobs(staleBefore);
+      for (const row of reclaimed) {
+        this.config.log.warn(
+          { submissionId: row.id, stuckSeconds: row.stuckSeconds },
+          'reclaimed stuck running submission; reset to inconclusive',
+        );
+      }
+    } catch (err) {
+      this.config.log.error({ err: errMsg(err) }, 'stuck-job reaper sweep failed');
     }
   }
 
