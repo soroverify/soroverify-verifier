@@ -38,6 +38,9 @@ export interface PublicResult {
 
 const VALID_STATUSES: readonly string[] = ['verified', 'mismatch', 'inconclusive'];
 
+/** A well-formed UUID (8-4-4-4-12 hex groups), matching the uuid column type. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * CORS policy for the public read-only endpoints (CORS_ALLOWED_ORIGINS).
  * These routes are unauthenticated and never touch credentials, so a plain
@@ -148,28 +151,42 @@ export function registerRoutes(
 
   app.get<{ Params: { submissionId: string } }>('/status/:submissionId', async (request, reply) => {
     applyReadCors(reply, corsAllowedOrigins, request.headers.origin);
-    const submission = await deps.database.getSubmission(request.params.submissionId);
-    if (submission === null) {
-      return reply.code(404).send({ error: { code: 'not_found', message: 'submission not found' } });
+    const { submissionId } = request.params;
+    if (!UUID_RE.test(submissionId)) {
+      return reply
+        .code(400)
+        .send({ error: { code: 'validation_failed', message: 'submissionId must be a valid UUID' } });
     }
-    const result =
-      submission.resultId === null
-        ? null
-        : await deps.database.getResultById(submission.resultId);
-    return reply.send({
-      submissionId: submission.id,
-      contractId: submission.contractId,
-      wasmHash: submission.wasmHash,
-      sourceRepo: submission.sourceRepo,
-      sourceRev: submission.sourceRev,
-      status: submission.status,
-      attempts: submission.attempts,
-      maxAttempts: submission.maxAttempts,
-      createdAt: submission.createdAt.toISOString(),
-      updatedAt: submission.updatedAt.toISOString(),
-      buildLog: submission.buildLog,
-      result: result === null ? null : toPublicResult(result),
-    });
+    try {
+      const submission = await deps.database.getSubmission(submissionId);
+      if (submission === null) {
+        return reply.code(404).send({ error: { code: 'not_found', message: 'submission not found' } });
+      }
+      const result =
+        submission.resultId === null
+          ? null
+          : await deps.database.getResultById(submission.resultId);
+      return reply.send({
+        submissionId: submission.id,
+        contractId: submission.contractId,
+        wasmHash: submission.wasmHash,
+        sourceRepo: submission.sourceRepo,
+        sourceRev: submission.sourceRev,
+        status: submission.status,
+        attempts: submission.attempts,
+        maxAttempts: submission.maxAttempts,
+        createdAt: submission.createdAt.toISOString(),
+        updatedAt: submission.updatedAt.toISOString(),
+        buildLog: submission.buildLog,
+        result: result === null ? null : toPublicResult(result),
+      });
+    } catch (err) {
+      // Never leak database internals to callers; log them and answer generic.
+      request.log.error({ err }, 'failed to read submission status');
+      return reply.code(500).send({
+        error: { code: 'internal_error', message: 'could not read submission status' },
+      });
+    }
   });
 
   app.options('/verifications/by-contract/:contractId', async (request, reply) => {

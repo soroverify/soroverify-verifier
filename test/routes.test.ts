@@ -51,9 +51,18 @@ class FakeDatabase {
   readonly calls: string[] = [];
   private results: VerificationResult[] = [];
   private submission: Submission | null = null;
+  private result: VerificationResult | null = null;
 
   setResults(results: VerificationResult[]): void {
     this.results = results;
+  }
+
+  setSubmission(submission: Submission | null): void {
+    this.submission = submission;
+  }
+
+  setResult(result: VerificationResult | null): void {
+    this.result = result;
   }
 
   async getResultsByWasmHash(wasmHash: string): Promise<VerificationResult[]> {
@@ -66,14 +75,16 @@ class FakeDatabase {
     return this.submission;
   }
 
-  async getSubmission(_submissionId: string): Promise<Submission | null> {
+  async getSubmission(submissionId: string): Promise<Submission | null> {
     this.calls.push('getSubmission');
-    return this.submission;
+    return this.submission !== null && this.submission.id === submissionId
+      ? this.submission
+      : null;
   }
 
-  async getResultById(_resultId: string): Promise<VerificationResult | null> {
+  async getResultById(resultId: string): Promise<VerificationResult | null> {
     this.calls.push('getResultById');
-    return null;
+    return this.result !== null && this.result.id === resultId ? this.result : null;
   }
 
   async close(): Promise<void> {}
@@ -102,6 +113,8 @@ beforeAll(() => {
 beforeEach(() => {
   db.calls.length = 0;
   db.setResults([]);
+  db.setSubmission(null);
+  db.setResult(null);
   resolveSpy.mockClear();
 });
 
@@ -230,6 +243,74 @@ describe('GET /verifications/by-contract/:contractId', () => {
   });
 });
 
+describe('GET /status/:submissionId', () => {
+  describe('malformed submissionId', () => {
+    const cases: [string, string][] = [
+      ['a non-UUID string', 'unknown-id'],
+      ['an empty string', ''],
+      ['a wrong-length string', 'a'.repeat(35)],
+      ['a wrong-format string (no dashes, non-hex)', 'z'.repeat(36)],
+    ];
+
+    it.each(cases)('rejects %s with 400 before any database query', async (_label, submissionId) => {
+      const response = await app.inject({ method: 'GET', url: `/status/${submissionId}` });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { error: { code: string; message: string } };
+      expect(body.error.code).toBe('validation_failed');
+      expect(body.error.message).toBe('submissionId must be a valid UUID');
+      // Rejected at the input-validation boundary: no database query executed.
+      expect(db.calls).toEqual([]);
+    });
+  });
+
+  it('returns 404 for a well-formed UUID with no matching submission', async () => {
+    const response = await app.inject({ method: 'GET', url: `/status/${randomUUID()}` });
+    expect(response.statusCode).toBe(404);
+    const body = response.json() as { error: { code: string } };
+    expect(body.error.code).toBe('not_found');
+    // The lookup ran (a single read), then correctly reported missing.
+    expect(db.calls).toEqual(['getSubmission']);
+  });
+
+  it('returns 200 with the submission and result data for an existing submission', async () => {
+    const submissionId = randomUUID();
+    const result = resultFixture();
+    const now = new Date();
+    db.setSubmission({
+      id: submissionId,
+      contractId: null,
+      wasmHash: WASM_HASH,
+      sourceRepo: SOURCE_REPO,
+      sourceRev: 'main',
+      buildImage: null,
+      status: 'verified',
+      attempts: 1,
+      maxAttempts: 3,
+      nextAttemptAt: now,
+      buildLog: null,
+      tarballSha256: null,
+      resultId: result.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    db.setResult(result);
+
+    const response = await app.inject({ method: 'GET', url: `/status/${submissionId}` });
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      submissionId: string;
+      status: string;
+      attempts: number;
+      result: { status: string } | null;
+    };
+    expect(body.submissionId).toBe(submissionId);
+    expect(body.status).toBe('verified');
+    expect(body.attempts).toBe(1);
+    expect(body.result?.status).toBe('verified');
+    expect(db.calls).toEqual(['getSubmission', 'getResultById']);
+  });
+});
+
 describe('CORS on public read endpoints', () => {
   it('sets Access-Control-Allow-Origin: * on GET /verifications/:wasmHash', async () => {
     db.setResults([resultFixture()]);
@@ -253,7 +334,7 @@ describe('CORS on public read endpoints', () => {
   });
 
   it('sets Access-Control-Allow-Origin: * on GET /status/:submissionId, including 404 responses', async () => {
-    const response = await app.inject({ method: 'GET', url: '/status/unknown-submission' });
+    const response = await app.inject({ method: 'GET', url: `/status/${randomUUID()}` });
     expect(response.statusCode).toBe(404);
     expect(response.headers['access-control-allow-origin']).toBe('*');
   });
