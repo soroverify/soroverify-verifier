@@ -24,10 +24,13 @@
  *    passed as positional arguments to a static entrypoint script, never
  *    interpolated into a shell string.
  *  - Containers are removed after every job, never reused.
- *
- * Network isolation, wall-clock timeout, and CPU/memory limits are enforced
- * in the following commit (feat(rebuild): enforce network isolation, timeout,
- * and resource limits) — this commit implements the functional flow.
+ *  - The build container runs with `--network none` (zero egress), a hard
+ *    wall-clock timeout (the container is killed when it trips), and CPU /
+ *    memory / process-count limits. A submission that never finishes cannot
+ *    block the queue forever.
+ *  - The wasm's recorded rust version (rsver) is pinned into the container as
+ *    RUSTUP_TOOLCHAIN so an in-source rust-toolchain.toml cannot silently
+ *    swap the toolchain mid-build (SEP-58).
  *
  * Failure modes:
  *  - fetchSourceTarball returns { status: 'error' } on clone/checkout failure
@@ -91,6 +94,16 @@ export interface RebuildConfig {
   verifyImage: string;
   /** Scratch directory for tarballs and extracted artifacts. */
   workDir?: string;
+  /** Wall-clock limit for one rebuild, in ms. Defaults to 10 minutes. */
+  buildTimeoutMs?: number;
+  /** Wall-clock limit for the source fetch, in ms. Defaults to 5 minutes. */
+  fetchTimeoutMs?: number;
+  /** CPU limit for the build container. Defaults to 2. */
+  cpus?: number;
+  /** Memory limit for the build container, in bytes. Defaults to 2 GiB. */
+  memoryBytes?: number;
+  /** Max processes inside the build container. Defaults to 512. */
+  pidsLimit?: number;
 }
 
 /**
@@ -178,6 +191,8 @@ export interface RebuildRequest {
   attempt: number;
   /** The wasm's bldimg value (already validated against the allowlist). */
   buildImage: string;
+  /** The wasm's recorded rust version (rsver), pinned as RUSTUP_TOOLCHAIN. */
+  rustVersion: string | null;
   /** The source tarball produced by fetchSourceTarball. */
   sourceTarball: Buffer;
   /** Recorded build arguments (bldarg), default ['contract','build']. */
@@ -246,11 +261,24 @@ export async function runRebuild(
   // inside the script. The 'sh' placeholder after the script becomes $0 so
   // the recorded arguments start at $1 and "$@" sees every one of them.
   const entrypointScript = 'tar -xzf /tmp/src.tar.gz -C /source && exec stellar "$@"';
+
+  // Network isolation: --network none gives the build container zero egress.
+  // This is the load-bearing constraint of the whole service — the rebuild
+  // must not be able to phone home or fetch anything unexpected. Memory and
+  // swap are set equal to disable swap; cpu and pid limits bound a runaway
+  // build.
+  const memoryBytes = config.memoryBytes ?? 2 * 1024 ** 3;
   const createArgs = [
     'create',
     '--name', containerName,
+    '--network', 'none',
+    '--memory', String(memoryBytes),
+    '--memory-swap', String(memoryBytes),
+    '--cpus', String(config.cpus ?? 2),
+    '--pids-limit', String(config.pidsLimit ?? 512),
     '--workdir', '/source',
     '--entrypoint', '/bin/sh',
+    ...(request.rustVersion === null ? [] : ['--env', `RUSTUP_TOOLCHAIN=${request.rustVersion}`]),
     request.buildImage,
     '-c', entrypointScript,
     'sh',
@@ -280,7 +308,20 @@ export async function runRebuild(
       return { status: 'error', reason: 'docker start failed', buildLog: commandLog(start) };
     }
 
-    const waitResult = await exec.exec('docker', ['wait', containerId]);
+    // Wall-clock bound: if the wait itself times out, the container is killed
+    // and the job is reported as timed out rather than left running forever.
+    const waitResult = await exec.exec('docker', ['wait', containerId], {
+      timeoutMs: config.buildTimeoutMs ?? 10 * 60 * 1000,
+    });
+    if (waitResult.timedOut) {
+      await exec.exec('docker', ['kill', containerId]);
+      const buildLog = await readContainerLogs(exec, containerId);
+      return {
+        status: 'error',
+        reason: 'build exceeded the wall-clock timeout and was killed',
+        buildLog,
+      };
+    }
     if (waitResult.exitCode !== 0) {
       return { status: 'error', reason: 'docker wait failed', buildLog: commandLog(waitResult) };
     }
