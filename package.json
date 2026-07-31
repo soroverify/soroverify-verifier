@@ -1,0 +1,33 @@
+{
+  "name": "soroverify-verifier",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Independent contract source verification service for Soroban: accepts source submissions, rebuilds them in an isolated container, and publishes signed, multi-verifier results.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.2.0",
+    "fastify": "^5.11.0",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.1",
+    "@types/pg": "^8.20.0",
+    "eslint": "^10.8.0",
+    "tsx": "^4.23.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.65.0",
+    "vitest": "^4.1.10"
+  }
+}
