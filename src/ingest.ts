@@ -17,6 +17,7 @@
 
 import { StrKey } from '@stellar/stellar-sdk';
 import type { Database } from './db.js';
+import { normalizeWasmHashHex } from './resolve.js';
 
 /** Untrusted request payload for POST /submissions. */
 export interface SubmissionRequest {
@@ -70,14 +71,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
-}
-
-/**
- * Canonicalize a validated wasm hash. Hex is case-insensitive and is folded
- * to lowercase; base64 is case-sensitive and must be kept byte-identical.
- */
-function normalizeWasmHash(raw: string, isHex: boolean): string {
-  return isHex ? raw.toLowerCase() : raw;
 }
 
 /**
@@ -161,8 +154,10 @@ export function validateAndNormalize(raw: unknown): ValidationResult {
   }
 
   // Every check above passed; the guarded values are known to be strings.
+  // Canonicalize to lowercase hex so one byte value has one spelling in the
+  // queue and in the results table.
   const normalizedWasmHash =
-    wasmHashRaw === undefined ? null : normalizeWasmHash(wasmHashRaw as string, wasmIsHex);
+    wasmHashRaw === undefined ? null : normalizeWasmHashHex(wasmHashRaw as string);
 
   return {
     ok: true,

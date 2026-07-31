@@ -384,6 +384,22 @@ export class Database {
     return row === undefined ? null : mapResultRow(row);
   }
 
+  /** Record the resolved wasm hash of a contractId-only submission. */
+  async updateResolvedWasmHash(submissionId: string, wasmHash: string): Promise<void> {
+    await this.pool.query(
+      'UPDATE submissions SET wasm_hash = $2, updated_at = now() WHERE id = $1',
+      [submissionId, wasmHash],
+    );
+  }
+
+  /** Record the content address of the stored source tarball. */
+  async setTarballSha256(submissionId: string, sha256: string): Promise<void> {
+    await this.pool.query(
+      'UPDATE submissions SET tarball_sha256 = $2, updated_at = now() WHERE id = $1',
+      [submissionId, sha256],
+    );
+  }
+
   /** Close the connection pool. */
   async close(): Promise<void> {
     await this.pool.end();

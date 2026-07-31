@@ -71,7 +71,7 @@ export class Resolver {
    * validated as plausible 32-byte hex/base64 before use. Throws RpcError.
    */
   async fetchWasmByHash(wasmHash: string): Promise<Buffer> {
-    const hex = toHex(wasmHash);
+    const hex = normalizeWasmHashHex(wasmHash);
     if (hex === null) {
       throw new RpcError('not_found', `wasm hash is not a 32-byte hex/base64 value: ${wasmHash}`);
     }
@@ -92,8 +92,13 @@ export class Resolver {
   }
 }
 
-/** Normalize a 32-byte hex/base64 hash to lowercase hex, or null if invalid. */
-function toHex(wasmHash: string): string | null {
+/**
+ * Canonicalize a 32-byte wasm hash to lowercase hex (hex stays hex, base64 is
+ * decoded and re-encoded as hex), or null when the value is not a plausible
+ * 32-byte hex/base64 encoding. Every part of the service that keys on wasm
+ * hashes uses this so one byte value has exactly one spelling.
+ */
+export function normalizeWasmHashHex(wasmHash: string): string | null {
   if (/^[0-9a-fA-F]{64}$/.test(wasmHash)) {
     return wasmHash.toLowerCase();
   }
