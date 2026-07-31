@@ -19,6 +19,9 @@
  *  - BUILD_TIMEOUT_MS, FETCH_TIMEOUT_MS, BUILD_CPUS, BUILD_MEMORY_BYTES,
  *    BUILD_PIDS_LIMIT, JOB_CONCURRENCY
  *  - HOST, PORT
+ *  - CORS_ALLOWED_ORIGINS    '*' (default) or a comma-separated list of exact
+ *                            origins for the public read endpoints; write
+ *                            routes are never CORS-enabled
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -44,13 +47,15 @@ export interface ServerConfig {
   host: string;
   port: number;
   loggerEnabled?: boolean;
+  /** CORS_ALLOWED_ORIGINS for the public read endpoints; '*' by default. */
+  corsAllowedOrigins?: string;
 }
 
 /** Build a configured Fastify instance with all routes registered. */
 export function buildServer(config: ServerConfig, deps: ServerDependencies): FastifyInstance {
   const app = Fastify({ logger: config.loggerEnabled ?? true });
   app.get('/health', async () => ({ status: 'ok' }));
-  registerRoutes(app, deps);
+  registerRoutes(app, deps, config.corsAllowedOrigins);
   return app;
 }
 
@@ -138,6 +143,7 @@ async function main(): Promise<void> {
   const config: ServerConfig = {
     host: process.env.HOST ?? '0.0.0.0',
     port: parsePort(process.env.PORT, 8080),
+    corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS ?? '*',
   };
 
   const app = buildServer(config, { database, store, resolver, peerVerifiers });

@@ -14,7 +14,7 @@
  */
 
 import { StrKey } from '@stellar/stellar-sdk';
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { ServerDependencies } from './index.js';
 import { validateAndNormalize, acceptSubmission, type SubmissionRequest } from './ingest.js';
 import { normalizeWasmHashHex, RpcError } from './resolve.js';
@@ -38,6 +38,69 @@ export interface PublicResult {
 
 const VALID_STATUSES: readonly string[] = ['verified', 'mismatch', 'inconclusive'];
 
+/**
+ * CORS policy for the public read-only endpoints (CORS_ALLOWED_ORIGINS).
+ * These routes are unauthenticated and never touch credentials, so a plain
+ * wildcard is safe and is the default; Access-Control-Allow-Credentials is
+ * deliberately never emitted. POST /submissions and the other non-read routes
+ * are not CORS-enabled at all (same-origin only).
+ */
+const DEFAULT_CORS_ALLOWED_ORIGINS = '*';
+const CORS_ALLOWED_METHODS = 'GET';
+const CORS_MAX_AGE = '86400';
+
+/**
+ * Decide the Access-Control-Allow-Origin value for a request. '*' allows any
+ * origin; otherwise CORS_ALLOWED_ORIGINS is a comma-separated list of exact
+ * origins and the request's Origin header is echoed only when it matches.
+ */
+function allowedCorsOrigin(allowedOrigins: string, origin: string | undefined): string | null {
+  if (allowedOrigins === '*') {
+    return '*';
+  }
+  const origins = allowedOrigins
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+  return origin !== undefined && origins.includes(origin) ? origin : null;
+}
+
+/** Attach CORS headers to a read-endpoint response. Never sets credentials. */
+function applyReadCors(reply: FastifyReply, allowedOrigins: string, origin: string | undefined): void {
+  if (allowedOrigins !== '*') {
+    // The CORS headers depend on the request Origin; keep caches honest.
+    reply.header('vary', 'Origin');
+  }
+  const allowed = allowedCorsOrigin(allowedOrigins, origin);
+  if (allowed !== null) {
+    reply.header('access-control-allow-origin', allowed);
+    reply.header('access-control-allow-methods', CORS_ALLOWED_METHODS);
+  }
+}
+
+/** Answer an OPTIONS preflight for one of the public read endpoints. */
+function answerCorsPreflight(
+  reply: FastifyReply,
+  allowedOrigins: string,
+  request: FastifyRequest,
+): FastifyReply {
+  if (allowedOrigins !== '*') {
+    // The CORS headers depend on the request Origin; keep caches honest.
+    reply.header('vary', 'Origin');
+  }
+  const allowed = allowedCorsOrigin(allowedOrigins, request.headers.origin);
+  if (allowed !== null) {
+    reply.header('access-control-allow-origin', allowed);
+    reply.header('access-control-allow-methods', CORS_ALLOWED_METHODS);
+    reply.header('access-control-max-age', CORS_MAX_AGE);
+    const requestedHeaders = request.headers['access-control-request-headers'];
+    if (typeof requestedHeaders === 'string' && requestedHeaders.length > 0) {
+      reply.header('access-control-allow-headers', requestedHeaders);
+    }
+  }
+  return reply.code(204).send();
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -46,8 +109,18 @@ function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** Register every HTTP route on the provided Fastify instance. */
-export function registerRoutes(app: FastifyInstance, deps: ServerDependencies): void {
+/**
+ * Register every HTTP route on the provided Fastify instance.
+ *
+ * @param corsAllowedOrigins CORS_ALLOWED_ORIGINS value; '*' by default. Only
+ *   the three public read endpoints are CORS-enabled; write routes stay
+ *   same-origin only.
+ */
+export function registerRoutes(
+  app: FastifyInstance,
+  deps: ServerDependencies,
+  corsAllowedOrigins = DEFAULT_CORS_ALLOWED_ORIGINS,
+): void {
   app.post<{ Body: SubmissionRequest }>('/submissions', async (request, reply) => {
     const result = validateAndNormalize(request.body);
     if (!result.ok) {
@@ -69,7 +142,12 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDependencies): 
     }
   });
 
+  app.options('/status/:submissionId', async (request, reply) => {
+    return answerCorsPreflight(reply, corsAllowedOrigins, request);
+  });
+
   app.get<{ Params: { submissionId: string } }>('/status/:submissionId', async (request, reply) => {
+    applyReadCors(reply, corsAllowedOrigins, request.headers.origin);
     const submission = await deps.database.getSubmission(request.params.submissionId);
     if (submission === null) {
       return reply.code(404).send({ error: { code: 'not_found', message: 'submission not found' } });
@@ -94,14 +172,24 @@ export function registerRoutes(app: FastifyInstance, deps: ServerDependencies): 
     });
   });
 
+  app.options('/verifications/by-contract/:contractId', async (request, reply) => {
+    return answerCorsPreflight(reply, corsAllowedOrigins, request);
+  });
+
   app.get<{ Params: { contractId: string } }>(
     '/verifications/by-contract/:contractId',
     async (request, reply) => {
+      applyReadCors(reply, corsAllowedOrigins, request.headers.origin);
       return handleVerificationsByContract(app, deps, request.params.contractId, reply);
     },
   );
 
+  app.options('/verifications/:wasmHash', async (request, reply) => {
+    return answerCorsPreflight(reply, corsAllowedOrigins, request);
+  });
+
   app.get<{ Params: { wasmHash: string } }>('/verifications/:wasmHash', async (request, reply) => {
+    applyReadCors(reply, corsAllowedOrigins, request.headers.origin);
     return handleVerifications(app, deps, request.params.wasmHash, reply);
   });
 

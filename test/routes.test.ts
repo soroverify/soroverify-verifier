@@ -66,6 +66,16 @@ class FakeDatabase {
     return this.submission;
   }
 
+  async getSubmission(_submissionId: string): Promise<Submission | null> {
+    this.calls.push('getSubmission');
+    return this.submission;
+  }
+
+  async getResultById(_resultId: string): Promise<VerificationResult | null> {
+    this.calls.push('getResultById');
+    return null;
+  }
+
   async close(): Promise<void> {}
 }
 
@@ -217,5 +227,136 @@ describe('GET /verifications/by-contract/:contractId', () => {
     expect(body.error.message).toContain(VALID_CONTRACT);
     // A missing contract is a 404, never a 200 with an empty envelope.
     expect(db.calls).toEqual([]);
+  });
+});
+
+describe('CORS on public read endpoints', () => {
+  it('sets Access-Control-Allow-Origin: * on GET /verifications/:wasmHash', async () => {
+    db.setResults([resultFixture()]);
+    const response = await app.inject({ method: 'GET', url: `/verifications/${WASM_HASH}` });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+    expect(response.headers['access-control-allow-methods']).toBe('GET');
+    // Wildcard-only, never credentialed.
+    expect(response.headers['access-control-allow-credentials']).toBeUndefined();
+  });
+
+  it('sets Access-Control-Allow-Origin: * on GET /verifications/by-contract/:contractId', async () => {
+    db.setResults([resultFixture()]);
+    resolveSpy.mockResolvedValueOnce(WASM_HASH);
+    const response = await app.inject({
+      method: 'GET',
+      url: `/verifications/by-contract/${VALID_CONTRACT}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  it('sets Access-Control-Allow-Origin: * on GET /status/:submissionId, including 404 responses', async () => {
+    const response = await app.inject({ method: 'GET', url: '/status/unknown-submission' });
+    expect(response.statusCode).toBe(404);
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+  });
+
+  it.each([
+    ['GET /verifications/:wasmHash', `/verifications/${WASM_HASH}`],
+    ['GET /verifications/by-contract/:contractId', `/verifications/by-contract/${VALID_CONTRACT}`],
+    ['GET /status/:submissionId', '/status/any-id'],
+  ])('answers an OPTIONS preflight for %s', async (_label, url) => {
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url,
+      headers: {
+        origin: 'https://wallet.example.com',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'content-type',
+      },
+    });
+    expect(response.statusCode).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('*');
+    expect(response.headers['access-control-allow-methods']).toBe('GET');
+    expect(response.headers['access-control-allow-headers']).toBe('content-type');
+    expect(response.headers['access-control-allow-credentials']).toBeUndefined();
+  });
+
+  it('does not send CORS headers on POST /submissions', async () => {
+    const response = await app.inject({ method: 'POST', url: '/submissions', payload: {} });
+    expect(response.statusCode).toBe(400);
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+    expect(response.headers['access-control-allow-methods']).toBeUndefined();
+    expect(response.headers['access-control-allow-credentials']).toBeUndefined();
+  });
+
+  it('does not answer an OPTIONS preflight for POST /submissions with CORS headers', async () => {
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: '/submissions',
+      headers: {
+        origin: 'https://wallet.example.com',
+        'access-control-request-method': 'POST',
+      },
+    });
+    // Write routes are same-origin only: unmatched OPTIONS gets no CORS.
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+});
+
+describe('CORS_ALLOWED_ORIGINS restriction', () => {
+  const ALLOWED = 'https://wallet.example.com, https://explorer.example.org';
+  let restrictedApp: FastifyInstance;
+
+  beforeAll(() => {
+    restrictedApp = buildServer(
+      { host: '127.0.0.1', port: 0, loggerEnabled: false, corsAllowedOrigins: ALLOWED },
+      {
+        database: db as unknown as Database,
+        store: new ContentStore('/tmp/soroverify-routes-cors-test-store'),
+        resolver,
+        peerVerifiers: [],
+      },
+    );
+  });
+
+  afterAll(async () => {
+    await restrictedApp.close();
+  });
+
+  it('echoes the request origin when it is allow-listed', async () => {
+    const response = await restrictedApp.inject({
+      method: 'GET',
+      url: `/verifications/${WASM_HASH}`,
+      headers: { origin: 'https://wallet.example.com' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBe('https://wallet.example.com');
+    // Caches must key on Origin since the echoed header varies per request.
+    expect(response.headers.vary).toBe('Origin');
+  });
+
+  it('sends no CORS headers for a non-allow-listed origin', async () => {
+    const response = await restrictedApp.inject({
+      method: 'GET',
+      url: `/verifications/${WASM_HASH}`,
+      headers: { origin: 'https://evil.example.net' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('answers a preflight only for an allow-listed origin', async () => {
+    const denied = await restrictedApp.inject({
+      method: 'OPTIONS',
+      url: `/verifications/${WASM_HASH}`,
+      headers: { origin: 'https://evil.example.net', 'access-control-request-method': 'GET' },
+    });
+    expect(denied.headers['access-control-allow-origin']).toBeUndefined();
+
+    const allowed = await restrictedApp.inject({
+      method: 'OPTIONS',
+      url: `/verifications/${WASM_HASH}`,
+      headers: { origin: 'https://explorer.example.org', 'access-control-request-method': 'GET' },
+    });
+    expect(allowed.statusCode).toBe(204);
+    expect(allowed.headers['access-control-allow-origin']).toBe('https://explorer.example.org');
   });
 });
