@@ -50,8 +50,17 @@ export type ValidationResult =
 const HEX_32_BYTES = /^[0-9a-fA-F]{64}$/;
 /** A 32-byte value written as base64: 43 unpadded chars, or 43 chars + one '='. */
 const BASE64_32_BYTES = /^[A-Za-z0-9+/]{43}={0,1}$/;
-/** Plausible git remote URL: https://, git://, ssh://, or scp-style git@host:path. */
-const GIT_URL = /^(https?|git|ssh):\/\/\S+$|^git@[^:\s]+:\S+$/;
+/**
+ * Plausible git remote URL: https://, git://, ssh://, or scp-style git@host:path.
+ *
+ * The URL body is validated against a conservative character whitelist rather
+ * than \S+: only alphanumerics plus the punctuation a git remote actually needs
+ * (._~:/@%?=#+,-) are accepted, so control characters (U+0000-U+001F) and
+ * shell metacharacters (; | & < > $ " ' ` ( ) [ ] { }) are rejected at the
+ * boundary and can never be enqueued.
+ */
+const GIT_URL =
+  /^(https?|git|ssh):\/\/[0-9A-Za-z._~:/@%?=#+,-]+$|^git@[0-9A-Za-z._~@-]+:[0-9A-Za-z._~:/@%?=#+,-]+$/;
 /** Git revision: a SHA, tag, branch, or ref path. No whitespace or control chars. */
 const GIT_REVISION = /^[0-9A-Za-z._/-]{1,128}$/;
 /** Container image reference: registry/name[:tag][@digest]. No whitespace. */
