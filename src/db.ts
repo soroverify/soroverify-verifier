@@ -30,7 +30,8 @@ export type ResultStatus = 'verified' | 'mismatch' | 'inconclusive';
 export interface Submission {
   id: string;
   contractId: string | null;
-  wasmHash: string;
+  /** Null until the job runner resolves it (contractId-only submissions). */
+  wasmHash: string | null;
   sourceRepo: string;
   sourceRev: string;
   buildImage: string | null;
@@ -70,7 +71,8 @@ export interface VerificationResult {
 /** Inputs for a new submission. */
 export interface NewSubmission {
   contractId: string | null;
-  wasmHash: string;
+  /** Null when only contractId was provided; the job runner resolves it. */
+  wasmHash: string | null;
   sourceRepo: string;
   sourceRev: string;
   buildImage: string | null;
@@ -97,7 +99,7 @@ export interface DatabaseConfig {
 type SubmissionRow = {
   id: string;
   contract_id: string | null;
-  wasm_hash: string;
+  wasm_hash: string | null;
   source_repo: string;
   source_rev: string;
   build_image: string | null;
@@ -188,7 +190,7 @@ export class Database {
       CREATE TABLE IF NOT EXISTS submissions (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         contract_id text,
-        wasm_hash text NOT NULL,
+        wasm_hash text,
         source_repo text NOT NULL,
         source_rev text NOT NULL,
         build_image text,

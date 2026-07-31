@@ -10,6 +10,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { pathToFileURL } from 'node:url';
 import { createDatabase, type Database } from './db.js';
+import { registerRoutes } from './routes.js';
 
 /** Everything the API routes need, injected rather than imported. */
 export interface ServerDependencies {
@@ -22,11 +23,11 @@ export interface ServerConfig {
   loggerEnabled?: boolean;
 }
 
-/** Build a configured Fastify instance. Route registration is added by
- * routes.ts in later commits; for now only the health probe is wired. */
-export function buildServer(config: ServerConfig): FastifyInstance {
+/** Build a configured Fastify instance with all routes registered. */
+export function buildServer(config: ServerConfig, deps: ServerDependencies): FastifyInstance {
   const app = Fastify({ logger: config.loggerEnabled ?? true });
   app.get('/health', async () => ({ status: 'ok' }));
+  registerRoutes(app, deps);
   return app;
 }
 
@@ -61,7 +62,7 @@ async function main(): Promise<void> {
     port: parsePort(process.env.PORT, 8080),
   };
 
-  const app = buildServer(config);
+  const app = buildServer(config, { database });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'shutting down');
