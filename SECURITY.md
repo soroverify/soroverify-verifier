@@ -17,10 +17,25 @@ are currently no supported release branches.
 
 ## Reporting a vulnerability
 
-Please report security issues privately — **do not open a public GitHub issue**.
-Contact the maintainers via the repository's security advisory workflow
-(GitHub → *Security* → *Report a vulnerability*), or by emailing the address
-listed under the repository description if one is published. Include:
+Please distinguish between two categories of report:
+
+1. **Trust model feedback.** If your concern is that a malicious submitter can
+   waste compute, that an unvetted `bldimg` on the allowlist could misbehave, or
+   that a single verifier's result shouldn't be trusted without corroboration —
+   that is the system working as designed, not a security bug. The threat model
+   above states these boundaries explicitly. Please file it as a public GitHub
+   Issue or Discussion.
+
+2. **Genuine security vulnerabilities.** If you found a way to escape the rebuild
+   container's isolation, bypass the `bldimg` allowlist, forge or replay a signed
+   result, achieve command injection through the ingest boundary, or otherwise
+   subvert a guarantee in the threat model above, report it privately via the
+   GitHub Security Advisories tab
+   (https://github.com/soroverify/soroverify-verifier/security/advisories/new)
+   rather than a public issue. Publishing a working exploit before a fix ships
+   would allow it to be used against live deployments.
+
+Do not open a public GitHub issue for a genuine vulnerability. Include:
 
 - A description of the issue and its impact.
 - Steps to reproduce, or a minimal proof of concept.
