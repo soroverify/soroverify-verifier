@@ -9,7 +9,7 @@ container, compares the rebuilt wasm against what is actually deployed, and publ
 signed, multi-verifier results that consumers can check without trusting this
 service's database.
 
-**Status:** working implementation, 53 tests passing, CI configured to run lint +
+**Status:** working implementation, 79 tests passing, CI configured to run lint +
 typecheck + test. Core modules are
 `ingest`, `resolve`, `meta`, `rebuild`, `compare`, `sign`, `store`, `queue`, `routes`.
 
@@ -126,12 +126,16 @@ docker build -t soroverify/verify-image:latest docker/verify-image
 
 # 3. Run
 export DATABASE_URL=postgres://postgres:dev@localhost:5432/soroverify
-export STELLAR_RPC_URL=https://soroban-mainnet.stellar.org
+export STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 export VERIFIER_PRIVATE_KEY="$(node -e "const {generateKeyPairSync}=require('crypto');console.log(generateKeyPairSync('ed25519').privateKey.export({format:'der',type:'pkcs8'}).toString('base64'))")"
 npm run dev
 ```
 
 The service listens on `0.0.0.0:8080` by default and is healthy at `GET /health`.
+
+> **Note:** the `STELLAR_RPC_URL` above is the **testnet** endpoint — the sensible
+default for a first run. **Mainnet** (`https://soroban-mainnet.stellar.org`) is the
+production endpoint.
 
 > **Note:** `VERIFIER_PRIVATE_KEY` unset generates an ephemeral identity per boot —
 > results stay self-verifying (each record carries its public key), but the
@@ -141,6 +145,14 @@ The service listens on `0.0.0.0:8080` by default and is healthy at `GET /health`
 
 All configuration is via environment variables. Copy [`.env.example`](.env.example)
 and adjust.
+
+> **Note:** `.env` is not loaded automatically yet (tracked as an open issue) — the
+service has no dotenv and the dev script passes no `--env-file`. Either export the
+variables directly, as the Quick start shows, or load the file explicitly:
+>
+> ```bash
+> node --env-file=.env node_modules/.bin/tsx watch src/index.ts
+> ```
 
 | Variable                 | Required | Default                   | Description |
 |--------------------------|----------|---------------------------|-------------|
@@ -322,4 +334,4 @@ docker/verify-image/     Dockerfile for the pinned source-fetch image
 
 ## License
 
-[MIT](LICENSE).
+[Apache-2.0](LICENSE).
