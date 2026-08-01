@@ -323,4 +323,17 @@ docker/verify-image/     Dockerfile for the pinned source-fetch image
 
 ## License
 
-[MIT](LICENSE).
+[Apache-2.0](LICENSE).
+
+## Maintainers
+
+| Name | GitHub |
+|---|---|
+| Hollujay | [@Hollujay](https://github.com/Hollujay) |
+| emarkees | [@emarkees](https://github.com/emarkees) |
+
+## Contributors
+
+<a href="https://github.com/soroverify/soroverify-verifier/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=soroverify/soroverify-verifier" />
+</a>
