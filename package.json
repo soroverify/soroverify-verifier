@@ -1,6 +1,7 @@
 {
   "name": "soroverify-verifier",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "description": "Independent contract source verification service for Soroban: accepts source submissions, rebuilds them in an isolated container, and publishes signed, multi-verifier results.",
   "type": "module",
