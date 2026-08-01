@@ -10,7 +10,7 @@ container, compares the rebuilt wasm against what is actually deployed, and publ
 signed, multi-verifier results that consumers can check without trusting this
 service's database.
 
-**Status:** working implementation, 53 tests passing, CI configured to run lint +
+**Status:** working implementation, 79 tests passing, CI configured to run lint +
 typecheck + test. Core modules are
 `ingest`, `resolve`, `meta`, `rebuild`, `compare`, `sign`, `store`, `queue`, `routes`.
 
