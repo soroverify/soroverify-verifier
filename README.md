@@ -1,6 +1,5 @@
 ![Soroverify](assets/soroverify-verifier.svg)
 
-
 [![CI](https://github.com/soroverify/soroverify-verifier/actions/workflows/ci.yml/badge.svg)](https://github.com/soroverify/soroverify-verifier/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
@@ -9,6 +8,14 @@ It accepts source submissions for a deployed contract, rebuilds them in an isola
 container, compares the rebuilt wasm against what is actually deployed, and publishes
 signed, multi-verifier results that consumers can check without trusting this
 service's database.
+
+**Related work.** StellarExpert's SEP-55 attestation and SoroSeal both touch
+contract verification on Stellar. StellarExpert attests that a CI build ran at
+a commit, without independently rebuilding. SoroSeal offers deterministic
+builds and on-chain certification, but certifies at deploy time through its
+own tooling. soroverify-verifier verifies any contract already on-chain,
+deployed by any path, retroactively, and signs results per-verifier rather
+than through a single trusted service.
 
 **Status:** working implementation, 79 tests passing, CI configured to run lint +
 typecheck + test. Core modules are
