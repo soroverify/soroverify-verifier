@@ -1,4 +1,12 @@
-# soroverify-verifier
+<p align="center">
+  <img src="./assets/banner-verifier.png" alt="SoroVerify Verifier">
+</p>
+
+# SoroVerify Verifier
+
+> Anyone can claim. SoroVerify proves.
+
+Verify that deployed Soroban contracts match their published source code through deterministic rebuilding and bytecode comparison.
 
 [![CI](https://github.com/soroverify/soroverify-verifier/actions/workflows/ci.yml/badge.svg)](https://github.com/soroverify/soroverify-verifier/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
