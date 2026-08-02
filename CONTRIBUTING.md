@@ -13,7 +13,7 @@ Requirements: Node.js >= 22, npm.
 npm install
 ```
 
-The unit test suite does **not** require Postgres or Docker — the database layer is
+The unit test suite does **not** require Postgres or Docker. The database layer is
 tested against the real `pg` pool only where the connection is lazy (see
 `test/smoke.test.ts`), and the rebuild pipeline is tested through an injectable
 `CommandExecutor` that records invocations instead of running containers. Running
@@ -53,12 +53,12 @@ for a PR to be merged.
 - **`.js` specifiers on relative imports.** This is a NodeNext ESM project; import
   `./foo.js`, not `./foo.ts` or `./foo`.
 - **Argument-array exec only.** Never build shell strings. Untrusted values go to
-  external commands (git, docker) as positional arguments — see the tests in
+  external commands (git, docker) as positional arguments. See the tests in
   `test/ingest.test.ts` that pin this contract.
 - **Never throw from validation.** The `validateAndNormalize`-style result objects
   (`{ ok: true, value } | { ok: false, issues }`) are the established pattern for
   untrusted input; keep it.
-- **Document failure modes.** Each module's header documents its failure modes —
+- **Document failure modes.** Each module's header documents its failure modes:
   what returns `null`, what never throws, what is retryable vs. terminal. Keep
   those headers accurate.
 - **No new runtime dependencies without discussion.** The dependency surface is
