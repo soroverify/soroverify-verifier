@@ -58,7 +58,7 @@ The result of a job is a **signed result record**:
 and `signature` is over the canonical JSON (sorted keys, no whitespace) of the
 payload fields only. A consumer can therefore verify any record end-to-end: check
 that the public key's fingerprint matches `verifier_id`, re-canonicalize the payload,
-and verify the signature. No database lookup is required — the record is
+and verify the signature. No database lookup is required: the record is
 self-authenticating. See [src/sign.ts](src/sign.ts).
 
 ### Status vocabulary
@@ -89,7 +89,7 @@ retried.
   unset. See [src/rebuild.ts](src/rebuild.ts).
 - **Verification records** are signed with this instance's Ed25519 key. Peers'
   records are fetched live and only accepted after their signatures verify against
-  their embedded public keys — nothing trusts a peer's database. See
+  their embedded public keys. Nothing trusts a peer's database. See
   [src/routes.ts](src/routes.ts) and [src/sign.ts](src/sign.ts).
 - **Content-addressed storage** keeps every submitted source tarball under the
   SHA-256 of its exact bytes; reads re-hash and reject mismatches, so stored
@@ -114,10 +114,10 @@ src/
 
 - **Node.js >= 22**
 - **Postgres** (any recent version; the schema uses `gen_random_uuid()`, built into
-  PostgreSQL 13+ — no extension needed)
+  PostgreSQL 13+, no extension needed)
 - **Docker** with access to the pinned build images (the build step and the initial
   source fetch both run in containers)
-- A **Soroban RPC endpoint** (mainnet, testnet, or local) — used to fetch the
+- A **Soroban RPC endpoint** (mainnet, testnet, or local), used to fetch the
   deployed wasm bytes
 
 ## Quick start
@@ -141,8 +141,8 @@ npm run dev
 
 The service listens on `0.0.0.0:8080` by default and is healthy at `GET /health`.
 
-> **Note:** `VERIFIER_PRIVATE_KEY` unset generates an ephemeral identity per boot —
-> results stay self-verifying (each record carries its public key), but the
+> **Note:** `VERIFIER_PRIVATE_KEY` unset generates an ephemeral identity per boot.
+> Results stay self-verifying (each record carries its public key), but the
 > `verifier_id` changes across restarts. Set a persistent key for a stable identity.
 
 ## Configuration
@@ -180,14 +180,14 @@ Put the output in `VERIFIER_PRIVATE_KEY`. The public key and its fingerprint
 
 ### Build image allowlist
 
-`ALLOWED_BUILD_IMAGES` must contain **digest-pinned** references — a mutable tag
+`ALLOWED_BUILD_IMAGES` must contain **digest-pinned** references. A mutable tag
 defeats the reproducibility guarantee and is rejected outright:
 
 ```
 ALLOWED_BUILD_IMAGES=ghcr.io/soroverify/verify@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08,…
 ```
 
-(The digest above is an illustrative placeholder — replace it with a real digest
+(The digest above is an illustrative placeholder. Replace it with a real digest
 you have vetted; see `.env.example`.)
 
 When unset or empty the service rejects every build (fail-closed). The wasm's
@@ -198,7 +198,7 @@ digest-pinned ones ever run.
 
 ### `GET /health`
 
-Always `200 {"status":"ok"}`. Liveness only — it does not check Postgres, Docker,
+Always `200 {"status":"ok"}`. Liveness only. It does not check Postgres, Docker,
 or RPC connectivity.
 
 ### `POST /submissions`
@@ -218,7 +218,7 @@ behavior.
 ```
 
 The optional `buildImage` field (a container image reference) is accepted and
-stored, but is currently informational — the rebuild uses the `bldimg` value
+stored, but is currently informational: the rebuild uses the `bldimg` value
 recorded inside the deployed wasm, never a client-supplied image. Omit the field
 unless you have a reason to set it (note `null` is rejected: only a valid image
 reference or an omitted field passes validation).
@@ -281,8 +281,8 @@ This service treats its inputs as hostile and its outputs as untrusted.
 
 - **Untrusted input never reaches an interpreter.** Every submitted field passes a
   conservative grammar (see [src/ingest.ts](src/ingest.ts)); all external commands
-  (git, docker) are invoked as `(executable, string[])` argument arrays — never
-  shell strings — and untrusted values arrive only as positional arguments to a
+  (git, docker) are invoked as `(executable, string[])` argument arrays, never
+  shell strings, and untrusted values arrive only as positional arguments to a
   static entrypoint script.
 - **The build cannot phone home.** Build containers run with `--network none`, so a
   compromised or malicious build cannot exfiltrate anything or fetch unexpected
@@ -295,7 +295,7 @@ This service treats its inputs as hostile and its outputs as untrusted.
   mid-build.
 - **Results are self-authenticating.** Signatures are verified against the embedded
   public key *and* the public key's fingerprint must equal `verifier_id`. Peers are
-  never trusted through their databases — only through their signatures.
+  never trusted through their databases, only through their signatures.
 - **Storage is tamper-evident.** Source tarballs are content-addressed by SHA-256
   and re-hashed on every read.
 - **Runaway jobs are bounded.** Hard wall-clock timeouts (container killed), CPU /
@@ -315,7 +315,7 @@ npm run lint       # eslint .
 npm test           # vitest run
 ```
 
-The unit tests exercise the injectable `CommandExecutor` — **no real Docker or
+The unit tests exercise the injectable `CommandExecutor`. **No real Docker or
 Postgres is required to run them**. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
 full development workflow.
 
