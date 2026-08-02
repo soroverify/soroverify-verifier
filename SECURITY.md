@@ -21,8 +21,8 @@ Please distinguish between two categories of report:
 
 1. **Trust model feedback.** If your concern is that a malicious submitter can
    waste compute, that an unvetted `bldimg` on the allowlist could misbehave, or
-   that a single verifier's result shouldn't be trusted without corroboration —
-   that is the system working as designed, not a security bug. The threat model
+   that a single verifier's result shouldn't be trusted without corroboration.
+   That is the system working as designed, not a security bug. The threat model
    above states these boundaries explicitly. Please file it as a public GitHub
    Issue or Discussion.
 
@@ -79,13 +79,13 @@ Postgres/Docker/Node runtimes.
 
 High-priority review targets for any security contribution:
 
-- `src/rebuild.ts` — container isolation, argument construction, timeout kill,
+- `src/rebuild.ts`: container isolation, argument construction, timeout kill,
   cleanup on every path.
-- `src/ingest.ts` — input validation boundary.
-- `src/sign.ts` — signature creation and verification.
-- `src/store.ts` — content-address integrity.
-- `src/routes.ts` — peer-fetching and untrusted record parsing.
-- `src/meta.ts` — parsing attacker-controlled wasm binaries (must never throw).
+- `src/ingest.ts`: input validation boundary.
+- `src/sign.ts`: signature creation and verification.
+- `src/store.ts`: content-address integrity.
+- `src/routes.ts`: peer-fetching and untrusted record parsing.
+- `src/meta.ts`: parsing attacker-controlled wasm binaries (must never throw).
 
 ## Security conventions
 
