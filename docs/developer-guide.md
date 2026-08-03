@@ -46,6 +46,18 @@ Set `STELLAR_RPC_URL=https://soroban-testnet.stellar.org` in `.env` — the
 default in `.env.example` points at mainnet, which may not be reachable from
 every network.
 
+**If every contract lookup fails with an RPC/fetch error even though a plain
+`curl` to the same RPC URL succeeds**, this is likely a broken or slow IPv6
+route to the RPC endpoint on your network, not a bug in this service. Node's
+HTTP client can hit that broken path by default even when tools like `curl`
+fall back to IPv4 automatically. Fix it by forcing IPv4 first, passed as a
+direct argument to `node` (not via `NODE_OPTIONS`, which does not reliably
+propagate through tsx watch):
+
+```bash
+node --dns-result-order=ipv4first --env-file=.env node_modules/.bin/tsx watch src/index.ts
+```
+
 **This service does not currently auto-load `.env`.** Plain `npm run dev`
 will fail with a missing-environment-variable error. Run it with:
 
