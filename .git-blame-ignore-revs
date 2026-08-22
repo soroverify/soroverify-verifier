@@ -1,0 +1,9 @@
+# Commit hashes listed here are excluded from `git blame` output (configure
+# with `git config blame.ignoreRevsFile .git-blame-ignore-revs`, or GitHub
+# picks this file up automatically for blame views in the web UI).
+#
+# Add a commit's hash here in the same commit that performs a formatting-only
+# change (e.g. the first `prettier --write .` reformat), so that blame keeps
+# pointing at the last substantive change to a line instead of the
+# reformatting commit. Do not add a hash here in a commit prior to the
+# reformat itself; add it in the same commit as the reformat.
