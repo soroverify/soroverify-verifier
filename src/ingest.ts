@@ -43,8 +43,7 @@ export interface ValidationIssue {
 }
 
 export type ValidationResult =
-  | { ok: true; value: NormalizedSubmission }
-  | { ok: false; issues: ValidationIssue[] };
+  { ok: true; value: NormalizedSubmission } | { ok: false; issues: ValidationIssue[] };
 
 /** A 32-byte value written as 64 hex characters. */
 const HEX_32_BYTES = /^[0-9a-fA-F]{64}$/;

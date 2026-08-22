@@ -55,7 +55,12 @@ current deployed Wasm hash via RPC before looking up results.
 **Response, 400** — malformed contract ID, rejected before any RPC call:
 
 ```json
-{"error":{"code":"validation_failed","message":"contractId must be a valid C-address (StrKey contract id)"}}
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "contractId must be a valid C-address (StrKey contract id)"
+  }
+}
 ```
 
 **Response, 404** — well-formed contract ID, but it does not resolve to a
@@ -87,7 +92,7 @@ queued.
 **Response, 202:**
 
 ```json
-{"submissionId": "…uuid…"}
+{ "submissionId": "…uuid…" }
 ```
 
 The submission is queued, not processed synchronously. Poll `GET
@@ -117,7 +122,7 @@ submission.
 Every error response follows the same shape:
 
 ```json
-{"error": {"code": "…", "message": "…"}}
+{ "error": { "code": "…", "message": "…" } }
 ```
 
 Common codes: `validation_failed` (malformed input, rejected before touching

@@ -69,7 +69,11 @@ function allowedCorsOrigin(allowedOrigins: string, origin: string | undefined): 
 }
 
 /** Attach CORS headers to a read-endpoint response. Never sets credentials. */
-function applyReadCors(reply: FastifyReply, allowedOrigins: string, origin: string | undefined): void {
+function applyReadCors(
+  reply: FastifyReply,
+  allowedOrigins: string,
+  origin: string | undefined,
+): void {
   if (allowedOrigins !== '*') {
     // The CORS headers depend on the request Origin; keep caches honest.
     reply.header('vary', 'Origin');
@@ -129,9 +133,7 @@ export function registerRoutes(
     if (!result.ok) {
       // The rejection reasons are not persisted anywhere, so log them.
       request.log.info({ issues: result.issues }, 'rejected submission');
-      return reply
-        .code(400)
-        .send({ error: { code: 'validation_failed', issues: result.issues } });
+      return reply.code(400).send({ error: { code: 'validation_failed', issues: result.issues } });
     }
     try {
       const accepted = await acceptSubmission(deps.database, result.value);
@@ -153,14 +155,16 @@ export function registerRoutes(
     applyReadCors(reply, corsAllowedOrigins, request.headers.origin);
     const { submissionId } = request.params;
     if (!UUID_RE.test(submissionId)) {
-      return reply
-        .code(400)
-        .send({ error: { code: 'validation_failed', message: 'submissionId must be a valid UUID' } });
+      return reply.code(400).send({
+        error: { code: 'validation_failed', message: 'submissionId must be a valid UUID' },
+      });
     }
     try {
       const submission = await deps.database.getSubmission(submissionId);
       if (submission === null) {
-        return reply.code(404).send({ error: { code: 'not_found', message: 'submission not found' } });
+        return reply
+          .code(404)
+          .send({ error: { code: 'not_found', message: 'submission not found' } });
       }
       const result =
         submission.resultId === null
@@ -243,9 +247,12 @@ async function handleVerifications(
 ): Promise<FastifyReply> {
   const wasmHash = normalizeWasmHashHex(rawHash);
   if (wasmHash === null) {
-    return reply
-      .code(400)
-      .send({ error: { code: 'validation_failed', message: 'wasmHash must be a 32-byte hex or base64 value' } });
+    return reply.code(400).send({
+      error: {
+        code: 'validation_failed',
+        message: 'wasmHash must be a 32-byte hex or base64 value',
+      },
+    });
   }
   return reply.send(await buildVerificationsEnvelope(app, deps, wasmHash));
 }
@@ -275,9 +282,12 @@ async function handleVerificationsByContract(
   reply: FastifyReply,
 ): Promise<FastifyReply> {
   if (!StrKey.isValidContract(contractId)) {
-    return reply
-      .code(400)
-      .send({ error: { code: 'validation_failed', message: 'contractId must be a valid C-address (StrKey contract id)' } });
+    return reply.code(400).send({
+      error: {
+        code: 'validation_failed',
+        message: 'contractId must be a valid C-address (StrKey contract id)',
+      },
+    });
   }
 
   let wasmHash: string;
@@ -288,14 +298,17 @@ async function handleVerificationsByContract(
       // Well-formed ID but no deployed contract behind it: a 404, never a
       // 200 with an empty envelope — that would be indistinguishable from
       // "resolved but genuinely unverified".
-      return reply
-        .code(404)
-        .send({ error: { code: 'not_found', message: `contract ${contractId} is not deployed on the network` } });
+      return reply.code(404).send({
+        error: {
+          code: 'not_found',
+          message: `contract ${contractId} is not deployed on the network`,
+        },
+      });
     }
     app.log.warn({ err, contractId }, 'by-contract resolution failed');
-    return reply
-      .code(502)
-      .send({ error: { code: 'rpc_error', message: 'could not resolve contract via Soroban RPC' } });
+    return reply.code(502).send({
+      error: { code: 'rpc_error', message: 'could not resolve contract via Soroban RPC' },
+    });
   }
   return reply.send(await buildVerificationsEnvelope(app, deps, wasmHash));
 }
@@ -318,11 +331,7 @@ async function buildVerificationsEnvelope(
 
   const results = dedupe([...localResults.map(toPublicResult), ...peerResults]);
   const status: VerificationStatus =
-    results.length > 0
-      ? inferStatus(results)
-      : submission === null
-        ? 'unverified'
-        : 'inconclusive';
+    results.length > 0 ? inferStatus(results) : submission === null ? 'unverified' : 'inconclusive';
 
   const sources = [
     ...new Set(

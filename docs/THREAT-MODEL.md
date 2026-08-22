@@ -67,7 +67,7 @@ unexpected dependencies.
   setting them equal), `--cpus`, and `--pids-limit` bound a runaway build,
   and a hard wall-clock timeout (`buildTimeoutMs`, default 10 minutes) kills
   the container via `docker wait` with a timeout and an explicit `docker
-  kill` on trip.
+kill` on trip.
 - Persist. Containers are named per submission/attempt and removed in the
   `finally` block of `runRebuild` (`cleanupContainer`) on every exit path,
   success or failure. No host bind mount is ever used; the source archive
@@ -121,7 +121,7 @@ only kept if all three of the following hold:
 3. The normalized `wasm_hash` in the record actually matches the hash that
    was queried, so a peer cannot answer for one hash with a signed record
    about a different one (`normalizeWasmHashHex(parsed.wasm_hash) ===
-   wasmHash` in `fetchPeerResults`, `src/routes.ts`).
+wasmHash` in `fetchPeerResults`, `src/routes.ts`).
 
 A peer's database content, HTTP response codes, or timing are never trusted
 on their own; only a valid signature over the exact payload counts. A peer

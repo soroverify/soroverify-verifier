@@ -77,9 +77,7 @@ class FakeDatabase {
 
   async getSubmission(submissionId: string): Promise<Submission | null> {
     this.calls.push('getSubmission');
-    return this.submission !== null && this.submission.id === submissionId
-      ? this.submission
-      : null;
+    return this.submission !== null && this.submission.id === submissionId ? this.submission : null;
   }
 
   async getResultById(resultId: string): Promise<VerificationResult | null> {
@@ -252,15 +250,18 @@ describe('GET /status/:submissionId', () => {
       ['a wrong-format string (no dashes, non-hex)', 'z'.repeat(36)],
     ];
 
-    it.each(cases)('rejects %s with 400 before any database query', async (_label, submissionId) => {
-      const response = await app.inject({ method: 'GET', url: `/status/${submissionId}` });
-      expect(response.statusCode).toBe(400);
-      const body = response.json() as { error: { code: string; message: string } };
-      expect(body.error.code).toBe('validation_failed');
-      expect(body.error.message).toBe('submissionId must be a valid UUID');
-      // Rejected at the input-validation boundary: no database query executed.
-      expect(db.calls).toEqual([]);
-    });
+    it.each(cases)(
+      'rejects %s with 400 before any database query',
+      async (_label, submissionId) => {
+        const response = await app.inject({ method: 'GET', url: `/status/${submissionId}` });
+        expect(response.statusCode).toBe(400);
+        const body = response.json() as { error: { code: string; message: string } };
+        expect(body.error.code).toBe('validation_failed');
+        expect(body.error.message).toBe('submissionId must be a valid UUID');
+        // Rejected at the input-validation boundary: no database query executed.
+        expect(db.calls).toEqual([]);
+      },
+    );
   });
 
   it('returns 404 for a well-formed UUID with no matching submission', async () => {

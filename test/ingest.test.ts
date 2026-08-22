@@ -125,10 +125,7 @@ function post(body: Record<string, unknown>) {
   return app.inject({ method: 'POST', url: '/submissions', payload: body });
 }
 
-function expectRejected(
-  response: Awaited<ReturnType<typeof post>>,
-  field: string,
-): void {
+function expectRejected(response: Awaited<ReturnType<typeof post>>, field: string): void {
   expect(response.statusCode).toBe(400);
   const body = response.json() as {
     error: { code: string; issues: { field: string }[] };

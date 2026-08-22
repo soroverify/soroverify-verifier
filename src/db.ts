@@ -16,12 +16,7 @@ import { Pool } from 'pg';
 
 /** Lifecycle status of a submission job. */
 export type JobStatus =
-  | 'pending'
-  | 'running'
-  | 'verified'
-  | 'mismatch'
-  | 'inconclusive'
-  | 'rejected';
+  'pending' | 'running' | 'verified' | 'mismatch' | 'inconclusive' | 'rejected';
 
 /** Result statuses that may appear in a signed result record. */
 export type ResultStatus = 'verified' | 'mismatch' | 'inconclusive';
@@ -256,10 +251,9 @@ export class Database {
 
   /** Fetch a submission by id, or null when it does not exist. */
   async getSubmission(id: string): Promise<Submission | null> {
-    const result = await this.pool.query<SubmissionRow>(
-      'SELECT * FROM submissions WHERE id = $1',
-      [id],
-    );
+    const result = await this.pool.query<SubmissionRow>('SELECT * FROM submissions WHERE id = $1', [
+      id,
+    ]);
     const row = result.rows[0];
     return row === undefined ? null : mapSubmissionRow(row);
   }
@@ -323,7 +317,11 @@ export class Database {
   }
 
   /** Put an inconclusive job back on the retry queue with a delay. */
-  async scheduleRetry(submissionId: string, buildLog: string | null, delaySeconds: number): Promise<void> {
+  async scheduleRetry(
+    submissionId: string,
+    buildLog: string | null,
+    delaySeconds: number,
+  ): Promise<void> {
     await this.pool.query(
       `UPDATE submissions
           SET status = 'inconclusive', build_log = $2, next_attempt_at = $3, updated_at = now()

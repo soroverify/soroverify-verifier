@@ -1,8 +1,8 @@
 # Security Policy
 
 soroverify-verifier is a security-sensitive service: its purpose is to issue
-trustworthy verdicts about deployed contract source, so both its *correctness* and
-its *isolation* are security properties.
+trustworthy verdicts about deployed contract source, so both its _correctness_ and
+its _isolation_ are security properties.
 
 ## Supported versions
 
@@ -10,10 +10,10 @@ This project is under active development and has not yet made a stable release.
 Security fixes are applied to `main` and backported on a best-effort basis; there
 are currently no supported release branches.
 
-| Version   | Supported          |
-|-----------|--------------------|
+| Version   | Supported             |
+| --------- | --------------------- |
 | `main`    | ✅ Active development |
-| `< 0.1.0` | ❌ Not released      |
+| `< 0.1.0` | ❌ Not released       |
 
 ## Reporting a vulnerability
 
@@ -58,7 +58,7 @@ The service is designed against the following adversaries:
   and must be on an operator-vetted, digest-pinned allowlist that fails closed.
 - **Malicious peers.** Other verifiers are queried over the network. Their result
   records are only trusted after signature verification against the embedded
-  public key, *and* the public key's fingerprint must equal `verifier_id`, *and*
+  public key, _and_ the public key's fingerprint must equal `verifier_id`, _and_
   the record must be about the queried wasm hash. Peer database content is never
   trusted.
 - **Tampering with stored artifacts.** Source tarballs are content-addressed by

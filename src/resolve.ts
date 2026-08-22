@@ -188,7 +188,8 @@ export function normalizeWasmHashHex(wasmHash: string): string | null {
   if (match === null) {
     return null;
   }
-  const padded = match[0].length % 4 === 0 ? match[0] : `${match[0]}${'='.repeat(4 - (match[0].length % 4))}`;
+  const padded =
+    match[0].length % 4 === 0 ? match[0] : `${match[0]}${'='.repeat(4 - (match[0].length % 4))}`;
   const decoded = Buffer.from(padded, 'base64');
   if (decoded.length !== 32) {
     return null;

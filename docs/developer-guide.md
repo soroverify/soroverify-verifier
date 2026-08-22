@@ -23,13 +23,13 @@ test/                  test suites, organized to mirror src/
 See `.env.example` in the repository for the authoritative, commented list.
 The essentials to get a local instance running:
 
-| Variable | Required | Notes |
-|---|---|---|
-| `DATABASE_URL` | Yes | Postgres connection string. Schema is created idempotently at boot. |
-| `STELLAR_RPC_URL` | Yes | Use `https://soroban-testnet.stellar.org` for local development. |
-| `VERIFIER_PRIVATE_KEY` | No | Base64 PKCS8 DER Ed25519 key. Unset generates an ephemeral identity per boot — fine for local dev, not for a public instance. |
-| `ALLOWED_BUILD_IMAGES` | No, but fails closed if unset | Comma-separated, digest-pinned. Every submission is rejected until this is set. |
-| `PORT` | No | Defaults to 8080. |
+| Variable               | Required                      | Notes                                                                                                                         |
+| ---------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`         | Yes                           | Postgres connection string. Schema is created idempotently at boot.                                                           |
+| `STELLAR_RPC_URL`      | Yes                           | Use `https://soroban-testnet.stellar.org` for local development.                                                              |
+| `VERIFIER_PRIVATE_KEY` | No                            | Base64 PKCS8 DER Ed25519 key. Unset generates an ephemeral identity per boot — fine for local dev, not for a public instance. |
+| `ALLOWED_BUILD_IMAGES` | No, but fails closed if unset | Comma-separated, digest-pinned. Every submission is rejected until this is set.                                               |
+| `PORT`                 | No                            | Defaults to 8080.                                                                                                             |
 
 ## Local setup
 

@@ -65,12 +65,12 @@ self-authenticating. See [src/sign.ts](src/sign.ts).
 
 ### Status vocabulary
 
-| Status       | Meaning                                                              |
-|--------------|----------------------------------------------------------------------|
-| `verified`   | A rebuild produced a wasm whose SHA-256 equals the deployed hash.    |
-| `mismatch`   | A rebuild completed but its wasm hash differs from the deployed one. |
-| `inconclusive`| Could not reach a verdict (no SEP-58 metadata, fetch/build/RPC failure, or retries exhausted). Never conflated with `mismatch`. |
-| `unverified` | No result *and* no submission exists for the hash at all (computed at the API layer). |
+| Status         | Meaning                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `verified`     | A rebuild produced a wasm whose SHA-256 equals the deployed hash.                                                               |
+| `mismatch`     | A rebuild completed but its wasm hash differs from the deployed one.                                                            |
+| `inconclusive` | Could not reach a verdict (no SEP-58 metadata, fetch/build/RPC failure, or retries exhausted). Never conflated with `mismatch`. |
+| `unverified`   | No result _and_ no submission exists for the hash at all (computed at the API layer).                                           |
 
 A job that is `inconclusive` retries with exponential backoff up to `max_attempts`
 (default 3); a job whose build image is not on the allowlist is `rejected` and never
@@ -152,24 +152,24 @@ The service listens on `0.0.0.0:8080` by default and is healthy at `GET /health`
 All configuration is via environment variables. Copy [`.env.example`](.env.example)
 and adjust.
 
-| Variable                 | Required | Default                   | Description |
-|--------------------------|----------|---------------------------|-------------|
-| `DATABASE_URL`           | **yes**  | —                         | Postgres connection string, e.g. `postgres://user:pass@host:5432/soroverify`. |
-| `STELLAR_RPC_URL`        | **yes**  | —                         | Soroban RPC endpoint, e.g. `https://soroban-mainnet.stellar.org`. |
-| `VERIFIER_PRIVATE_KEY`   | no       | ephemeral                 | base64 PKCS8 DER Ed25519 private key. Unset = fresh identity per boot. |
-| `ALLOWED_BUILD_IMAGES`   | no       | empty (fail closed)       | Comma-separated, **digest-pinned** build images the service will run. Empty = every build rejected. |
-| `VERIFY_IMAGE`           | no       | `soroverify/verify-image:latest` | Image used for the source-fetch step. |
-| `PEER_VERIFIERS`         | no       | empty                     | Comma-separated base URLs of independent verifiers, queried for cross-checks. |
-| `STORE_DIR`              | no       | `./data`                  | Content-addressed storage directory for source tarballs. |
-| `WORK_DIR`               | no       | `/tmp/soroverify`         | Scratch directory for fetch/build artifacts. |
-| `BUILD_TIMEOUT_MS`       | no       | `600000` (10 min)         | Wall-clock limit for one rebuild; the container is killed when it trips. |
-| `FETCH_TIMEOUT_MS`       | no       | `300000` (5 min)          | Wall-clock limit for the source fetch. |
-| `BUILD_CPUS`             | no       | `2`                       | CPU limit for the build container. |
-| `BUILD_MEMORY_BYTES`     | no       | `2147483648` (2 GiB)      | Memory limit for the build container; swap disabled by setting swap = memory. |
-| `BUILD_PIDS_LIMIT`       | no       | `512`                     | Max processes inside the build container. |
-| `JOB_CONCURRENCY`        | no       | `4`                       | Max jobs processed at once. |
-| `HOST`                   | no       | `0.0.0.0`                 | Bind address. |
-| `PORT`                   | no       | `8080`                    | Listen port. |
+| Variable               | Required | Default                          | Description                                                                                         |
+| ---------------------- | -------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`         | **yes**  | —                                | Postgres connection string, e.g. `postgres://user:pass@host:5432/soroverify`.                       |
+| `STELLAR_RPC_URL`      | **yes**  | —                                | Soroban RPC endpoint, e.g. `https://soroban-mainnet.stellar.org`.                                   |
+| `VERIFIER_PRIVATE_KEY` | no       | ephemeral                        | base64 PKCS8 DER Ed25519 private key. Unset = fresh identity per boot.                              |
+| `ALLOWED_BUILD_IMAGES` | no       | empty (fail closed)              | Comma-separated, **digest-pinned** build images the service will run. Empty = every build rejected. |
+| `VERIFY_IMAGE`         | no       | `soroverify/verify-image:latest` | Image used for the source-fetch step.                                                               |
+| `PEER_VERIFIERS`       | no       | empty                            | Comma-separated base URLs of independent verifiers, queried for cross-checks.                       |
+| `STORE_DIR`            | no       | `./data`                         | Content-addressed storage directory for source tarballs.                                            |
+| `WORK_DIR`             | no       | `/tmp/soroverify`                | Scratch directory for fetch/build artifacts.                                                        |
+| `BUILD_TIMEOUT_MS`     | no       | `600000` (10 min)                | Wall-clock limit for one rebuild; the container is killed when it trips.                            |
+| `FETCH_TIMEOUT_MS`     | no       | `300000` (5 min)                 | Wall-clock limit for the source fetch.                                                              |
+| `BUILD_CPUS`           | no       | `2`                              | CPU limit for the build container.                                                                  |
+| `BUILD_MEMORY_BYTES`   | no       | `2147483648` (2 GiB)             | Memory limit for the build container; swap disabled by setting swap = memory.                       |
+| `BUILD_PIDS_LIMIT`     | no       | `512`                            | Max processes inside the build container.                                                           |
+| `JOB_CONCURRENCY`      | no       | `4`                              | Max jobs processed at once.                                                                         |
+| `HOST`                 | no       | `0.0.0.0`                        | Bind address.                                                                                       |
+| `PORT`                 | no       | `8080`                           | Listen port.                                                                                        |
 
 ### Generating a persistent verifier key
 
@@ -212,10 +212,10 @@ behavior.
 
 ```json
 {
-  "contractId": "C…",                    // optional, but contractId or wasmHash required
-  "wasmHash":   "…64 hex or base64…",    // optional, normalized to lowercase hex
+  "contractId": "C…", // optional, but contractId or wasmHash required
+  "wasmHash": "…64 hex or base64…", // optional, normalized to lowercase hex
   "sourceRepo": "https://github.com/example/contract.git",
-  "sourceRev":  "main"
+  "sourceRev": "main"
 }
 ```
 
@@ -235,17 +235,17 @@ Poll the job lifecycle:
 ```json
 {
   "submissionId": "<uuid>",
-  "contractId":   "C…",
-  "wasmHash":     "…64 hex…",
-  "sourceRepo":   "…",
-  "sourceRev":    "…",
-  "status":       "pending",
-  "attempts":     0,
-  "maxAttempts":  3,
-  "createdAt":    "2026-07-31T14:00:00.000Z",
-  "updatedAt":    "2026-07-31T14:00:00.000Z",
-  "buildLog":     null,
-  "result":       null
+  "contractId": "C…",
+  "wasmHash": "…64 hex…",
+  "sourceRepo": "…",
+  "sourceRev": "…",
+  "status": "pending",
+  "attempts": 0,
+  "maxAttempts": 3,
+  "createdAt": "2026-07-31T14:00:00.000Z",
+  "updatedAt": "2026-07-31T14:00:00.000Z",
+  "buildLog": null,
+  "result": null
 }
 ```
 
@@ -296,7 +296,7 @@ This service treats its inputs as hostile and its outputs as untrusted.
   `RUSTUP_TOOLCHAIN` so an in-source `rust-toolchain.toml` cannot swap toolchains
   mid-build.
 - **Results are self-authenticating.** Signatures are verified against the embedded
-  public key *and* the public key's fingerprint must equal `verifier_id`. Peers are
+  public key _and_ the public key's fingerprint must equal `verifier_id`. Peers are
   never trusted through their databases, only through their signatures.
 - **Storage is tamper-evident.** Source tarballs are content-addressed by SHA-256
   and re-hashed on every read.
@@ -336,8 +336,8 @@ docker/verify-image/     Dockerfile for the pinned source-fetch image
 
 ## Maintainers
 
-| Name | GitHub |
-|---|---|
+| Name     | GitHub                                   |
+| -------- | ---------------------------------------- |
 | Hollujay | [@Hollujay](https://github.com/Hollujay) |
 | emarkees | [@emarkees](https://github.com/emarkees) |
 

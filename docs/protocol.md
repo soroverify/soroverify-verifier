@@ -52,11 +52,11 @@ These are the only states a signed, on-chain-adjacent result can be in. Two
 additional transient states exist only inside the aggregator's own job
 tracking and are never signed or published as a final result:
 
-| State | Meaning | Durable? |
-|---|---|---|
-| `verified` | Rebuild completed cleanly and the hash matches the deployed Wasm. | Yes, signed |
-| `mismatch` | Rebuild completed cleanly and the hash genuinely differs. | Yes, signed |
-| `unverified` | No source has been submitted for this hash at all. | Yes, signed |
+| State          | Meaning                                                                                                                | Durable?              |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| `verified`     | Rebuild completed cleanly and the hash matches the deployed Wasm.                                                      | Yes, signed           |
+| `mismatch`     | Rebuild completed cleanly and the hash genuinely differs.                                                              | Yes, signed           |
+| `unverified`   | No source has been submitted for this hash at all.                                                                     | Yes, signed           |
 | `inconclusive` | The rebuild could not complete (toolchain error, timeout, unrecognized build metadata). Retried on a bounded schedule. | Transient, not signed |
 
 The distinction between `mismatch` and `inconclusive` is deliberate and load

@@ -26,7 +26,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Database, Submission } from './db.js';
 import type { Resolver } from './resolve.js';
-import { hasBuildEnvironment, parseWasmMeta, readBuildEnvironment, type MetaEntry } from './meta.js';
+import {
+  hasBuildEnvironment,
+  parseWasmMeta,
+  readBuildEnvironment,
+  type MetaEntry,
+} from './meta.js';
 import {
   fetchSourceTarball,
   runRebuild,
@@ -111,7 +116,9 @@ export class JobRunner {
       const buildTimeoutMs = this.config.rebuildConfig.buildTimeoutMs ?? 10 * 60 * 1000;
       const fetchTimeoutMs = this.config.fetchTimeoutMs ?? 5 * 60 * 1000;
       const graceMs = 2 * 60 * 1000;
-      const staleBefore = new Date(Date.now() - (Math.max(buildTimeoutMs, fetchTimeoutMs) + graceMs));
+      const staleBefore = new Date(
+        Date.now() - (Math.max(buildTimeoutMs, fetchTimeoutMs) + graceMs),
+      );
       const reclaimed = await this.config.database.reclaimStuckJobs(staleBefore);
       for (const row of reclaimed) {
         this.config.log.warn(
@@ -149,10 +156,7 @@ export class JobRunner {
         // keep polling so processing resumes once the database is back.
         consecutiveErrors += 1;
         const backoffMs = Math.min(pollIntervalMs * 2 ** consecutiveErrors, 60_000);
-        this.config.log.error(
-          { err: errMsg(err), backoffMs },
-          'job claim failed; backing off',
-        );
+        this.config.log.error({ err: errMsg(err), backoffMs }, 'job claim failed; backing off');
         await sleep(backoffMs);
       }
     }
@@ -175,7 +179,10 @@ export class JobRunner {
           wasmHash = await this.config.resolver.resolveWasmHash(submission.contractId);
           await this.config.database.updateResolvedWasmHash(submission.id, wasmHash);
         } catch (err) {
-          await this.inconclusive(submission, `could not resolve deployed wasm hash: ${errMsg(err)}`);
+          await this.inconclusive(
+            submission,
+            `could not resolve deployed wasm hash: ${errMsg(err)}`,
+          );
           return;
         }
       }
@@ -282,7 +289,10 @@ export class JobRunner {
       log.info({ submissionId: submission.id, status }, 'submission resolved');
     } catch (err) {
       // An unexpected failure must never crash the loop or wedge the job.
-      log.error({ err: errMsg(err), submissionId: submission.id }, 'unexpected error processing submission');
+      log.error(
+        { err: errMsg(err), submissionId: submission.id },
+        'unexpected error processing submission',
+      );
       try {
         await this.inconclusive(submission, `internal error: ${errMsg(err)}`);
       } catch (recordErr) {
@@ -316,7 +326,10 @@ export class JobRunner {
         buildLog: logText,
         resultId: null,
       });
-      this.config.log.info({ submissionId: submission.id }, 'inconclusive after exhausting retry budget');
+      this.config.log.info(
+        { submissionId: submission.id },
+        'inconclusive after exhausting retry budget',
+      );
     }
   }
 }

@@ -44,7 +44,7 @@ import dynamic from 'next/dynamic';
 
 const SoroverifyBadge = dynamic(
   () => import('@soroverify/widget/react').then((mod) => mod.SoroverifyBadge),
-  { ssr: false }
+  { ssr: false },
 );
 ```
 
@@ -77,10 +77,7 @@ If you want to require agreement across more than one verifier rather than
 trusting a single instance, pass the set of verifier IDs you trust:
 
 ```typescript
-const summary = resolveTrust(response.results, [
-  'verifier-id-one',
-  'verifier-id-two',
-]);
+const summary = resolveTrust(response.results, ['verifier-id-one', 'verifier-id-two']);
 ```
 
 This is the mechanism that lets a consumer avoid depending on any single

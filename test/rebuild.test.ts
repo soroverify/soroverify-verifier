@@ -170,7 +170,11 @@ describe('runRebuild isolation and timeout', () => {
 
     it('rejects a tag-only image reference (not digest-pinned)', async () => {
       const exec = new RecordingExecutor();
-      const outcome = await runRebuild(exec, makeConfig(), makeRequest({ buildImage: 'ubuntu:latest' }));
+      const outcome = await runRebuild(
+        exec,
+        makeConfig(),
+        makeRequest({ buildImage: 'ubuntu:latest' }),
+      );
       expect(outcome.status).toBe('rejected');
       expect(exec.calls).toEqual([]);
     });
@@ -207,7 +211,9 @@ describe('runRebuild isolation and timeout', () => {
         (c) => c.args[0] === 'cp' && c.args[2] === `${CONTAINER_ID}:/tmp/src.tar.gz`,
       );
       const cpOut = exec.calls.find(
-        (c) => c.args[0] === 'cp' && c.args[1] === `${CONTAINER_ID}:/source/target/wasm32v1-none/release`,
+        (c) =>
+          c.args[0] === 'cp' &&
+          c.args[1] === `${CONTAINER_ID}:/source/target/wasm32v1-none/release`,
       );
       expect(cpIn).toBeDefined();
       expect(cpOut).toBeDefined();
@@ -285,11 +291,11 @@ describe('runRebuild isolation and timeout', () => {
       exec.handle((args) => (args[0] === 'create' ? result(0, Buffer.from(CONTAINER_ID)) : null));
       exec.handle((args) => (args[0] === 'cp' ? result(0) : null));
       exec.handle((args) => (args[0] === 'start' ? result(0) : null));
-      exec.handle(
-        (args) => (args[0] === 'wait' ? result(0, Buffer.alloc(0), Buffer.alloc(0), true) : null),
+      exec.handle((args) =>
+        args[0] === 'wait' ? result(0, Buffer.alloc(0), Buffer.alloc(0), true) : null,
       );
-      exec.handle(
-        (args) => (args[0] === 'logs' ? result(0, Buffer.from('partial build output before kill')) : null),
+      exec.handle((args) =>
+        args[0] === 'logs' ? result(0, Buffer.from('partial build output before kill')) : null,
       );
       exec.handle((args) => (args[0] === 'kill' ? result(0) : null));
       exec.handle((args) => (args[0] === 'rm' ? result(0) : null));
@@ -328,9 +334,7 @@ describe('runRebuild isolation and timeout', () => {
       const outcome = await runRebuild(exec, makeConfig(), makeRequest({ submissionId }));
       const ok = asSuccess(outcome);
 
-      expect(ok.rebuiltArtifacts).toEqual([
-        { name: 'contract.wasm', hash: sha256Hex(wasmBytes) },
-      ]);
+      expect(ok.rebuiltArtifacts).toEqual([{ name: 'contract.wasm', hash: sha256Hex(wasmBytes) }]);
       expect(ok.buildLog).toContain('build log output');
       // The container was removed after the successful run.
       const rmCall = findCall(exec, 'rm');
@@ -343,7 +347,9 @@ describe('runRebuild isolation and timeout', () => {
       exec.handle((args) => (args[0] === 'cp' ? result(0) : null));
       exec.handle((args) => (args[0] === 'start' ? result(0) : null));
       exec.handle((args) => (args[0] === 'wait' ? result(0, Buffer.from('1')) : null));
-      exec.handle((args) => (args[0] === 'logs' ? result(0, Buffer.from('compile error log')) : null));
+      exec.handle((args) =>
+        args[0] === 'logs' ? result(0, Buffer.from('compile error log')) : null,
+      );
       exec.handle((args) => (args[0] === 'rm' ? result(0) : null));
 
       const outcome = await runRebuild(exec, makeConfig(), makeRequest());

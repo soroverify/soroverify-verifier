@@ -63,7 +63,11 @@ export interface CommandExecutor {
 
 /** Real executor over child_process.execFile. */
 export class ChildProcessExecutor implements CommandExecutor {
-  async exec(command: string, args: string[], opts?: { timeoutMs?: number }): Promise<CommandResult> {
+  async exec(
+    command: string,
+    args: string[],
+    opts?: { timeoutMs?: number },
+  ): Promise<CommandResult> {
     const maxBuffer = 512 * 1024 * 1024; // wasm trees can be large
     return new Promise<CommandResult>((resolve) => {
       // encoding: 'buffer' is load-bearing: execFile defaults to utf8, which
@@ -71,7 +75,13 @@ export class ChildProcessExecutor implements CommandExecutor {
       execFile(
         command,
         args,
-        { maxBuffer, timeout: opts?.timeoutMs ?? 0, killSignal: 'SIGKILL', windowsHide: true, encoding: 'buffer' },
+        {
+          maxBuffer,
+          timeout: opts?.timeoutMs ?? 0,
+          killSignal: 'SIGKILL',
+          windowsHide: true,
+          encoding: 'buffer',
+        },
         (error, stdout, stderr) => {
           if (error === null) {
             resolve({ exitCode: 0, stdout, stderr, timedOut: false });
@@ -147,8 +157,7 @@ export interface FetchRequest {
 }
 
 export type FetchOutcome =
-  | { status: 'success'; tarball: Buffer }
-  | { status: 'error'; reason: string; log: string };
+  { status: 'success'; tarball: Buffer } | { status: 'error'; reason: string; log: string };
 
 /** Static script for the fetch container; repo/rev arrive as $1/$2 (argv). */
 const FETCH_SCRIPT =
@@ -170,7 +179,18 @@ export async function fetchSourceTarball(
 ): Promise<FetchOutcome> {
   const result = await exec.exec(
     'docker',
-    ['run', '--rm', '--entrypoint', '/bin/sh', config.verifyImage, '-c', FETCH_SCRIPT, 'sh', request.repo, request.rev],
+    [
+      'run',
+      '--rm',
+      '--entrypoint',
+      '/bin/sh',
+      config.verifyImage,
+      '-c',
+      FETCH_SCRIPT,
+      'sh',
+      request.repo,
+      request.rev,
+    ],
     { timeoutMs },
   );
   const log = `${result.stdout.toString('utf8')}\n${result.stderr.toString('utf8')}`;
@@ -244,7 +264,9 @@ export async function runRebuild(
     return { status: 'rejected', reason: allowed.reason, buildLog: '' };
   }
 
-  const containerName = sanitizeContainerName(`soroverify-${request.submissionId}-${request.attempt}`);
+  const containerName = sanitizeContainerName(
+    `soroverify-${request.submissionId}-${request.attempt}`,
+  );
   const jobDir = join(config.workDir ?? '/tmp/soroverify', request.submissionId);
   const tarballPath = join(jobDir, 'source.tar.gz');
   const outDir = join(jobDir, 'out');
@@ -270,17 +292,26 @@ export async function runRebuild(
   const memoryBytes = config.memoryBytes ?? 2 * 1024 ** 3;
   const createArgs = [
     'create',
-    '--name', containerName,
-    '--network', 'none',
-    '--memory', String(memoryBytes),
-    '--memory-swap', String(memoryBytes),
-    '--cpus', String(config.cpus ?? 2),
-    '--pids-limit', String(config.pidsLimit ?? 512),
-    '--workdir', '/source',
-    '--entrypoint', '/bin/sh',
+    '--name',
+    containerName,
+    '--network',
+    'none',
+    '--memory',
+    String(memoryBytes),
+    '--memory-swap',
+    String(memoryBytes),
+    '--cpus',
+    String(config.cpus ?? 2),
+    '--pids-limit',
+    String(config.pidsLimit ?? 512),
+    '--workdir',
+    '/source',
+    '--entrypoint',
+    '/bin/sh',
     ...(request.rustVersion === null ? [] : ['--env', `RUSTUP_TOOLCHAIN=${request.rustVersion}`]),
     request.buildImage,
-    '-c', entrypointScript,
+    '-c',
+    entrypointScript,
     'sh',
     ...request.buildArgs,
     ...request.buildOptions,
@@ -290,7 +321,11 @@ export async function runRebuild(
   const createResult = await exec.exec('docker', createArgs);
   if (createResult.exitCode !== 0) {
     const buildLog = commandLog(createResult);
-    return { status: 'error', reason: `docker create failed (exit ${createResult.exitCode})`, buildLog };
+    return {
+      status: 'error',
+      reason: `docker create failed (exit ${createResult.exitCode})`,
+      buildLog,
+    };
   }
   const containerId = createResult.stdout.toString('utf8').trim();
 
@@ -300,7 +335,11 @@ export async function runRebuild(
 
     const copyIn = await exec.exec('docker', ['cp', tarballPath, `${containerId}:/tmp/src.tar.gz`]);
     if (copyIn.exitCode !== 0) {
-      return { status: 'error', reason: 'docker cp (source in) failed', buildLog: commandLog(copyIn) };
+      return {
+        status: 'error',
+        reason: 'docker cp (source in) failed',
+        buildLog: commandLog(copyIn),
+      };
     }
 
     const start = await exec.exec('docker', ['start', containerId]);
@@ -329,7 +368,11 @@ export async function runRebuild(
     const containerExit = Number.parseInt(waitOutput, 10);
     const buildLog = await readContainerLogs(exec, containerId);
     if (!Number.isInteger(containerExit)) {
-      return { status: 'error', reason: `docker wait returned unexpected output: ${waitOutput}`, buildLog };
+      return {
+        status: 'error',
+        reason: `docker wait returned unexpected output: ${waitOutput}`,
+        buildLog,
+      };
     }
     if (containerExit !== 0) {
       return {
@@ -342,7 +385,9 @@ export async function runRebuild(
     await mkdir(outDir, { recursive: true });
     // Standard layout first; fall back to the whole tree for exotic layouts.
     const copyOutRelease = await exec.exec('docker', [
-      'cp', `${containerId}:/source/target/wasm32v1-none/release`, outDir,
+      'cp',
+      `${containerId}:/source/target/wasm32v1-none/release`,
+      outDir,
     ]);
     if (copyOutRelease.exitCode !== 0) {
       const copyOutSource = await exec.exec('docker', ['cp', `${containerId}:/source`, outDir]);
@@ -399,10 +444,7 @@ export function sha256Hex(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-async function readContainerLogs(
-  exec: CommandExecutor,
-  containerId: string,
-): Promise<string> {
+async function readContainerLogs(exec: CommandExecutor, containerId: string): Promise<string> {
   const result = await exec.exec('docker', ['logs', containerId]);
   return `${result.stdout.toString('utf8')}\n${result.stderr.toString('utf8')}`;
 }

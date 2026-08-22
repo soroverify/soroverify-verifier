@@ -29,7 +29,7 @@ export STELLAR_RPC_URL=https://soroban-mainnet.stellar.org
 npm run dev
 ```
 
-See README.md → *Configuration* for the full environment variable reference
+See README.md → _Configuration_ for the full environment variable reference
 (`VERIFIER_PRIVATE_KEY`, `ALLOWED_BUILD_IMAGES`, `PEER_VERIFIERS`, …).
 
 ## Commands

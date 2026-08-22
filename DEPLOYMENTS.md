@@ -9,14 +9,14 @@ claims here without trusting this repository or its authors.
 Throughout development and testing, the project has exercised the verifier
 against one real Soroban contract deployed on Stellar **testnet**:
 
-| Field       | Value |
-|-------------|-------|
-| Contract ID | `CDNA2XPXQ5XEVG4J5S4CFD5XJ7RI7O5G3HBU3TALYXUMVA3KVMFW3RCE` |
+| Field       | Value                                                              |
+| ----------- | ------------------------------------------------------------------ |
+| Contract ID | `CDNA2XPXQ5XEVG4J5S4CFD5XJ7RI7O5G3HBU3TALYXUMVA3KVMFW3RCE`         |
 | Wasm hash   | `ae93c5657badf39e151ce54a5bd163127c6590785d40f0d6f28c25d45b37af9e` |
-| Network     | Stellar testnet |
+| Network     | Stellar testnet                                                    |
 
 **What this is not:** this is not a deployment of the soroverify-verifier
-*service* — it is a Soroban contract used as a test fixture, so that the
+_service_ — it is a Soroban contract used as a test fixture, so that the
 service has a real, live, on-chain contract to point `contractId`/`wasmHash`
 resolution at during manual testing and development. No source has ever been
 submitted for this contract to any verifier instance, so querying

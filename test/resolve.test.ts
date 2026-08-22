@@ -81,9 +81,7 @@ describe('Resolver transient-failure retry', () => {
 
   it('retries fetchWasmByHash the same way, passing the normalized lowercase hex', async () => {
     const { resolver, getContractWasmByHash } = makeResolver();
-    getContractWasmByHash
-      .mockRejectedValueOnce(FETCH_FAILED)
-      .mockResolvedValueOnce(WASM_BYTES);
+    getContractWasmByHash.mockRejectedValueOnce(FETCH_FAILED).mockResolvedValueOnce(WASM_BYTES);
 
     await expect(resolver.fetchWasmByHash(WASM_HASH.toUpperCase())).resolves.toEqual(WASM_BYTES);
     expect(getContractWasmByHash).toHaveBeenCalledTimes(2);
