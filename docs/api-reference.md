@@ -98,6 +98,27 @@ queued.
 The submission is queued, not processed synchronously. Poll `GET
 /status/:submissionId` for progress.
 
+**Response, 429** — the per-IP rate limit on this endpoint was exceeded
+(`SUBMISSIONS_RATE_LIMIT_MAX` requests per `SUBMISSIONS_RATE_LIMIT_WINDOW_MS`,
+5/min by default). Back off and retry later; see the `retry-after` header.
+
+**Response, 503:**
+
+```json
+{
+  "error": {
+    "code": "queue_full",
+    "message": "service is at capacity (200/200 active submissions); please retry later"
+  }
+}
+```
+
+The service-wide `MAX_ACTIVE_SUBMISSIONS` ceiling on submissions
+queued-or-running at once has been reached. This is independent of the rate
+limit above: it protects against a distributed set of submitters
+collectively growing the backlog even if each individually stays under the
+per-IP limit. Retry later.
+
 ## `GET /status/:submissionId`
 
 **Path parameter:** `submissionId` — a UUID.

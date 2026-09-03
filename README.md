@@ -153,24 +153,29 @@ The service listens on `0.0.0.0:8080` by default and is healthy at `GET /health`
 All configuration is via environment variables. Copy [`.env.example`](.env.example)
 and adjust.
 
-| Variable               | Required | Default                          | Description                                                                                         |
-| ---------------------- | -------- | -------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `DATABASE_URL`         | **yes**  | —                                | Postgres connection string, e.g. `postgres://user:pass@host:5432/soroverify`.                       |
-| `STELLAR_RPC_URL`      | **yes**  | —                                | Soroban RPC endpoint, e.g. `https://soroban-mainnet.stellar.org`.                                   |
-| `VERIFIER_PRIVATE_KEY` | no       | ephemeral                        | base64 PKCS8 DER Ed25519 private key. Unset = fresh identity per boot.                              |
-| `ALLOWED_BUILD_IMAGES` | no       | empty (fail closed)              | Comma-separated, **digest-pinned** build images the service will run. Empty = every build rejected. |
-| `VERIFY_IMAGE`         | no       | `soroverify/verify-image:latest` | Image used for the source-fetch step.                                                               |
-| `PEER_VERIFIERS`       | no       | empty                            | Comma-separated base URLs of independent verifiers, queried for cross-checks.                       |
-| `STORE_DIR`            | no       | `./data`                         | Content-addressed storage directory for source tarballs.                                            |
-| `WORK_DIR`             | no       | `/tmp/soroverify`                | Scratch directory for fetch/build artifacts.                                                        |
-| `BUILD_TIMEOUT_MS`     | no       | `600000` (10 min)                | Wall-clock limit for one rebuild; the container is killed when it trips.                            |
-| `FETCH_TIMEOUT_MS`     | no       | `300000` (5 min)                 | Wall-clock limit for the source fetch.                                                              |
-| `BUILD_CPUS`           | no       | `2`                              | CPU limit for the build container.                                                                  |
-| `BUILD_MEMORY_BYTES`   | no       | `2147483648` (2 GiB)             | Memory limit for the build container; swap disabled by setting swap = memory.                       |
-| `BUILD_PIDS_LIMIT`     | no       | `512`                            | Max processes inside the build container.                                                           |
-| `JOB_CONCURRENCY`      | no       | `4`                              | Max jobs processed at once.                                                                         |
-| `HOST`                 | no       | `0.0.0.0`                        | Bind address.                                                                                       |
-| `PORT`                 | no       | `8080`                           | Listen port.                                                                                        |
+| Variable                           | Required | Default                          | Description                                                                                                        |
+| ---------------------------------- | -------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                     | **yes**  | —                                | Postgres connection string, e.g. `postgres://user:pass@host:5432/soroverify`.                                      |
+| `STELLAR_RPC_URL`                  | **yes**  | —                                | Soroban RPC endpoint, e.g. `https://soroban-mainnet.stellar.org`.                                                  |
+| `VERIFIER_PRIVATE_KEY`             | no       | ephemeral                        | base64 PKCS8 DER Ed25519 private key. Unset = fresh identity per boot.                                             |
+| `ALLOWED_BUILD_IMAGES`             | no       | empty (fail closed)              | Comma-separated, **digest-pinned** build images the service will run. Empty = every build rejected.                |
+| `VERIFY_IMAGE`                     | no       | `soroverify/verify-image:latest` | Image used for the source-fetch step.                                                                              |
+| `PEER_VERIFIERS`                   | no       | empty                            | Comma-separated base URLs of independent verifiers, queried for cross-checks.                                      |
+| `STORE_DIR`                        | no       | `./data`                         | Content-addressed storage directory for source tarballs.                                                           |
+| `WORK_DIR`                         | no       | `/tmp/soroverify`                | Scratch directory for fetch/build artifacts.                                                                       |
+| `BUILD_TIMEOUT_MS`                 | no       | `600000` (10 min)                | Wall-clock limit for one rebuild; the container is killed when it trips.                                           |
+| `FETCH_TIMEOUT_MS`                 | no       | `300000` (5 min)                 | Wall-clock limit for the source fetch.                                                                             |
+| `BUILD_CPUS`                       | no       | `2`                              | CPU limit for the build container.                                                                                 |
+| `BUILD_MEMORY_BYTES`               | no       | `2147483648` (2 GiB)             | Memory limit for the build container; swap disabled by setting swap = memory.                                      |
+| `BUILD_PIDS_LIMIT`                 | no       | `512`                            | Max processes inside the build container.                                                                          |
+| `JOB_CONCURRENCY`                  | no       | `4`                              | Max jobs processed at once.                                                                                        |
+| `MAX_ACTIVE_SUBMISSIONS`           | no       | `200`                            | Service-wide ceiling on submissions queued or running at once; a submission past it gets a 503, not a silent drop. |
+| `HOST`                             | no       | `0.0.0.0`                        | Bind address.                                                                                                      |
+| `PORT`                             | no       | `8080`                           | Listen port.                                                                                                       |
+| `RATE_LIMIT_MAX`                   | no       | `300`                            | Global per-IP request limit (per `RATE_LIMIT_WINDOW_MS`) across every route.                                       |
+| `RATE_LIMIT_WINDOW_MS`             | no       | `60000`                          | Window for `RATE_LIMIT_MAX`, in ms.                                                                                |
+| `SUBMISSIONS_RATE_LIMIT_MAX`       | no       | `5`                              | Stricter per-IP limit on POST /submissions alone (per `SUBMISSIONS_RATE_LIMIT_WINDOW_MS`).                         |
+| `SUBMISSIONS_RATE_LIMIT_WINDOW_MS` | no       | `60000`                          | Window for `SUBMISSIONS_RATE_LIMIT_MAX`, in ms.                                                                    |
 
 ### Generating a persistent verifier key
 
