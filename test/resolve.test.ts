@@ -38,6 +38,7 @@ function makeResolver(overrides: Partial<ResolverConfig> = {}) {
     resolver,
     getContractWasmByContractId: vi.spyOn(server, 'getContractWasmByContractId'),
     getContractWasmByHash: vi.spyOn(server, 'getContractWasmByHash'),
+    getHealth: vi.spyOn(server, 'getHealth'),
   };
 }
 
@@ -128,6 +129,31 @@ describe('Resolver transient-failure retry', () => {
       kind: 'not_found',
     });
     expect(getContractWasmByHash).not.toHaveBeenCalled();
+  });
+});
+
+describe('Resolver.checkHealth', () => {
+  it('resolves when the RPC server answers getHealth', async () => {
+    const { resolver, getHealth } = makeResolver();
+    getHealth.mockResolvedValue({
+      status: 'healthy',
+      latestLedger: 1,
+      oldestLedger: 1,
+      ledgerRetentionWindow: 1,
+    });
+
+    await expect(resolver.checkHealth()).resolves.toBeUndefined();
+    expect(getHealth).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates the failure when the RPC server is unreachable, without retrying', async () => {
+    const { resolver, getHealth } = makeResolver();
+    getHealth.mockRejectedValue(new TypeError('fetch failed'));
+
+    await expect(resolver.checkHealth()).rejects.toThrow('fetch failed');
+    // A readiness probe must reflect current state, not mask an outage
+    // behind the resolution methods' transient-retry loop.
+    expect(getHealth).toHaveBeenCalledTimes(1);
   });
 });
 

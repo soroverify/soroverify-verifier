@@ -94,6 +94,37 @@ const DEFAULT_SUBMISSIONS_RATE_LIMIT_WINDOW_MS = 60_000;
  */
 const DEFAULT_MAX_ACTIVE_SUBMISSIONS = 200;
 
+/**
+ * Bound for each GET /ready dependency check. A dependency that is merely
+ * slow to answer should not be able to hang the readiness probe forever, so
+ * every check races against this timeout and is reported as failed if it
+ * loses.
+ */
+const READY_CHECK_TIMEOUT_MS = 5_000;
+
+/** Race a promise against a timeout, rejecting with a labeled error if it loses. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} check timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -130,7 +161,38 @@ export async function buildServer(
     max: config.rateLimitMax ?? DEFAULT_RATE_LIMIT_MAX,
     timeWindow: config.rateLimitWindowMs ?? DEFAULT_RATE_LIMIT_WINDOW_MS,
   });
+  // Pure liveness: confirms the process is up and answering, nothing more.
+  // Always fast, no dependency checks, so it stays a reliable signal even
+  // when the database or RPC endpoint is down.
   app.get('/health', async () => ({ status: 'ok' }));
+
+  // Readiness: confirms the service can actually do its job right now. Both
+  // dependency checks are real, cheap round trips (a SELECT 1, and the RPC
+  // server's own getHealth method), run concurrently and each bounded by
+  // READY_CHECK_TIMEOUT_MS. A failure answers 503 naming exactly which
+  // dependency failed and why, never a generic "not ready".
+  app.get('/ready', async (_request, reply) => {
+    const [database, stellarRpc] = await Promise.allSettled([
+      withTimeout(deps.database.ping(), READY_CHECK_TIMEOUT_MS, 'database'),
+      withTimeout(deps.resolver.checkHealth(), READY_CHECK_TIMEOUT_MS, 'stellar_rpc'),
+    ]);
+    const checks = {
+      database:
+        database.status === 'fulfilled'
+          ? { ok: true }
+          : { ok: false, error: errMsg(database.reason) },
+      stellarRpc:
+        stellarRpc.status === 'fulfilled'
+          ? { ok: true }
+          : { ok: false, error: errMsg(stellarRpc.reason) },
+    };
+    const allOk = checks.database.ok && checks.stellarRpc.ok;
+    return reply.code(allOk ? 200 : 503).send({
+      status: allOk ? 'ready' : 'unavailable',
+      checks,
+    });
+  });
+
   registerRoutes(app, deps, config.corsAllowedOrigins, {
     max: config.submissionsRateLimitMax ?? DEFAULT_SUBMISSIONS_RATE_LIMIT_MAX,
     timeWindow: config.submissionsRateLimitWindowMs ?? DEFAULT_SUBMISSIONS_RATE_LIMIT_WINDOW_MS,

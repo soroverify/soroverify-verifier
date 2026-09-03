@@ -179,6 +179,16 @@ export class Database {
     });
   }
 
+  /**
+   * Cheap liveness check for GET /ready: a real round-trip query, not just
+   * "the pool object exists" (a Pool can be constructed successfully even
+   * when the database is completely unreachable; nothing about it is
+   * checked until a query actually runs). Throws on failure.
+   */
+  async ping(): Promise<void> {
+    await this.pool.query('SELECT 1');
+  }
+
   /** Create the submissions/results tables and supporting indexes. Idempotent. */
   async ensureSchema(): Promise<void> {
     await this.pool.query(`

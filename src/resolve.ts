@@ -108,6 +108,18 @@ export class Resolver {
   }
 
   /**
+   * Cheap reachability check for GET /ready: the RPC server's own
+   * `getHealth` JSON-RPC method, not a full request against contract data.
+   * Deliberately makes a single attempt with no transient retry, unlike the
+   * resolution methods above: a readiness probe should reflect the current
+   * state of the dependency, not mask a real outage behind an in-process
+   * retry loop. Throws on failure.
+   */
+  async checkHealth(): Promise<void> {
+    await this.server.getHealth();
+  }
+
+  /**
    * Run an RPC operation, retrying only transient failures with a short delay
    * between attempts. A stale pooled keep-alive connection fails once and then
    * a fresh connection succeeds, so a bounded retry heals the common
