@@ -209,6 +209,23 @@ digest-pinned ones ever run.
 Always `200 {"status":"ok"}`. Liveness only. It does not check Postgres, Docker,
 or RPC connectivity.
 
+### `GET /ready`
+
+Readiness. Checks the database (a real `SELECT 1`) and the configured Stellar
+RPC endpoint (a real, lightweight `getHealth` call), each bounded by a five
+second timeout. `200` when both succeed, `503` naming exactly which dependency
+failed and why when either does not:
+
+```json
+{
+  "status": "unavailable",
+  "checks": {
+    "database": { "ok": false, "error": "connect ECONNREFUSED 127.0.0.1:5432" },
+    "stellarRpc": { "ok": true }
+  }
+}
+```
+
 ### `POST /submissions`
 
 Queue a verification request. The body is validated against a strict grammar;

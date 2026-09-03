@@ -69,7 +69,10 @@ it. The service will typically still start and answer `GET /health`
 (liveness only, as documented in [OPERATIONS.md](OPERATIONS.md)), which can
 be misleading: the process being "up" says nothing about whether it can
 actually execute the rebuild pipeline that is the entire point of running
-it.
+it. `GET /ready` checks the database and Stellar RPC connectivity, but not
+Docker reachability, so it will also report `200` on a host that cannot run
+the rebuild pipeline; there is currently no readiness check for Docker
+itself.
 
 ## What does work
 

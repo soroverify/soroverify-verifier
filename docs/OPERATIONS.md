@@ -117,7 +117,16 @@ Unavailable` naming the current backlog size and the limit.
 
 - **Health.** `GET /health` is liveness only; it always returns `200
 {"status":"ok"}` and does not check Postgres, Docker, or RPC connectivity.
-  It tells you the process is up, not that it can do anything useful.
+  It tells you the process is up, not that it can do anything useful. Use it
+  for a process supervisor's restart decision, not for load balancer or
+  orchestrator traffic routing, since it stays green even when the service
+  cannot do anything.
+- **Readiness.** `GET /ready` checks the database (`SELECT 1`) and the
+  Stellar RPC endpoint (`getHealth`), each bounded by a five second timeout,
+  and returns `503` naming exactly which dependency failed and why. Point a
+  load balancer's or orchestrator's readiness probe here, not at `/health`,
+  so traffic is only routed to an instance that can genuinely process a
+  submission right now.
 - **Job backlog.** Watch the count of `pending`/`running` rows in the
   submissions table growing over time relative to `JOB_CONCURRENCY`; a
   sustained backlog means jobs are arriving faster than they can be
