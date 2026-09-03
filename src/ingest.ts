@@ -8,11 +8,21 @@
  * interpreter — always as argument-array entries, never interpolated into a
  * shell string.
  *
+ * A validated submission is still turned away, honestly, when the service is
+ * already at capacity: acceptSubmission checks a global (not per-submitter)
+ * active-submission ceiling before the row is inserted, so a distributed
+ * flood of submitters cannot collectively grow the backlog without bound even
+ * if each individually stays under the per-IP rate limit on POST
+ * /submissions (see src/index.ts). This is a separate concern from
+ * JOB_CONCURRENCY (src/queue.ts), which bounds how many jobs run at once —
+ * the ceiling here bounds how many can be queued-or-running at once.
+ *
  * Failure modes:
  *  - validateAndNormalize never throws; malformed input is reported as
  *    { ok: false, issues }.
  *  - acceptSubmission throws when the database insert fails; the route maps
- *    that to a 500.
+ *    that to a 500. It never throws for a full queue — that is reported as
+ *    { ok: false, activeCount, limit } so the route can answer 503.
  */
 
 import { StrKey } from '@stellar/stellar-sdk';
@@ -179,21 +189,36 @@ export function validateAndNormalize(raw: unknown): ValidationResult {
   };
 }
 
+/** Outcome of acceptSubmission: either a queued submission id, or a clear,
+ * honest refusal (never a silent drop) when the service is at capacity. */
+export type AcceptOutcome =
+  { ok: true; submissionId: string } | { ok: false; activeCount: number; limit: number };
+
 /**
  * Accept a validated submission: insert a 'pending' row and return the
- * submission id. The rebuild happens asynchronously via the queue; nothing
- * here touches git or docker.
+ * submission id, unless the global active-submission ceiling
+ * (maxActiveSubmissions) is already met, in which case no row is inserted and
+ * the current backlog size is reported instead. The rebuild happens
+ * asynchronously via the queue; nothing here touches git or docker.
  */
 export async function acceptSubmission(
   db: Database,
   submission: NormalizedSubmission,
-): Promise<{ submissionId: string }> {
-  const inserted = await db.insertSubmission({
-    contractId: submission.contractId,
-    wasmHash: submission.wasmHash,
-    sourceRepo: submission.sourceRepo,
-    sourceRev: submission.sourceRev,
-    buildImage: submission.buildImage,
-  });
-  return { submissionId: inserted.id };
+  maxActiveSubmissions: number,
+): Promise<AcceptOutcome> {
+  const inserted = await db.insertSubmissionIfUnderCeiling(
+    {
+      contractId: submission.contractId,
+      wasmHash: submission.wasmHash,
+      sourceRepo: submission.sourceRepo,
+      sourceRev: submission.sourceRev,
+      buildImage: submission.buildImage,
+    },
+    maxActiveSubmissions,
+  );
+  if (inserted === null) {
+    const activeCount = await db.countActiveSubmissions();
+    return { ok: false, activeCount, limit: maxActiveSubmissions };
+  }
+  return { ok: true, submissionId: inserted.id };
 }

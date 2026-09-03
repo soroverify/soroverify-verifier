@@ -52,6 +52,15 @@ const DEFAULT_CORS_ALLOWED_ORIGINS = '*';
 const CORS_ALLOWED_METHODS = 'GET';
 const CORS_MAX_AGE = '86400';
 
+/** A @fastify/rate-limit per-route override, in the shape its `config.rateLimit` expects. */
+export interface RateLimitRule {
+  max: number;
+  timeWindow: number;
+}
+
+/** Fallback used only if registerRoutes is called directly without one (buildServer always passes one). */
+const DEFAULT_SUBMISSIONS_RATE_LIMIT: RateLimitRule = { max: 5, timeWindow: 60_000 };
+
 /**
  * Decide the Access-Control-Allow-Origin value for a request. '*' allows any
  * origin; otherwise CORS_ALLOWED_ORIGINS is a comma-separated list of exact
@@ -122,30 +131,58 @@ function errMsg(err: unknown): string {
  * @param corsAllowedOrigins CORS_ALLOWED_ORIGINS value; '*' by default. Only
  *   the three public read endpoints are CORS-enabled; write routes stay
  *   same-origin only.
+ * @param submissionsRateLimit Per-route @fastify/rate-limit override for
+ *   POST /submissions, applied on top of the global default registered by
+ *   buildServer — stricter, since this is the one endpoint that triggers a
+ *   real git clone and container build per request.
  */
 export function registerRoutes(
   app: FastifyInstance,
   deps: ServerDependencies,
   corsAllowedOrigins = DEFAULT_CORS_ALLOWED_ORIGINS,
+  submissionsRateLimit: RateLimitRule = DEFAULT_SUBMISSIONS_RATE_LIMIT,
 ): void {
-  app.post<{ Body: SubmissionRequest }>('/submissions', async (request, reply) => {
-    const result = validateAndNormalize(request.body);
-    if (!result.ok) {
-      // The rejection reasons are not persisted anywhere, so log them.
-      request.log.info({ issues: result.issues }, 'rejected submission');
-      return reply.code(400).send({ error: { code: 'validation_failed', issues: result.issues } });
-    }
-    try {
-      const accepted = await acceptSubmission(deps.database, result.value);
-      return reply.code(202).send({ submissionId: accepted.submissionId });
-    } catch (err) {
-      // Never leak database internals to callers; log them and answer generic.
-      request.log.error({ err }, 'failed to accept submission');
-      return reply.code(500).send({
-        error: { code: 'internal_error', message: 'could not accept submission' },
-      });
-    }
-  });
+  app.post<{ Body: SubmissionRequest }>(
+    '/submissions',
+    { config: { rateLimit: submissionsRateLimit } },
+    async (request, reply) => {
+      const result = validateAndNormalize(request.body);
+      if (!result.ok) {
+        // The rejection reasons are not persisted anywhere, so log them.
+        request.log.info({ issues: result.issues }, 'rejected submission');
+        return reply
+          .code(400)
+          .send({ error: { code: 'validation_failed', issues: result.issues } });
+      }
+      try {
+        const accepted = await acceptSubmission(
+          deps.database,
+          result.value,
+          deps.maxActiveSubmissions,
+        );
+        if (!accepted.ok) {
+          // Full, but never silently: a clear reason and the actual numbers.
+          request.log.warn(
+            { activeCount: accepted.activeCount, limit: accepted.limit },
+            'submission rejected: active-submission ceiling reached',
+          );
+          return reply.code(503).send({
+            error: {
+              code: 'queue_full',
+              message: `service is at capacity (${accepted.activeCount}/${accepted.limit} active submissions); please retry later`,
+            },
+          });
+        }
+        return reply.code(202).send({ submissionId: accepted.submissionId });
+      } catch (err) {
+        // Never leak database internals to callers; log them and answer generic.
+        request.log.error({ err }, 'failed to accept submission');
+        return reply.code(500).send({
+          error: { code: 'internal_error', message: 'could not accept submission' },
+        });
+      }
+    },
+  );
 
   app.options('/status/:submissionId', async (request, reply) => {
     return answerCorsPreflight(reply, corsAllowedOrigins, request);

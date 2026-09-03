@@ -97,15 +97,16 @@ const resolveSpy = vi.spyOn(resolver, 'resolveWasmHash');
 let app: FastifyInstance;
 let db: FakeDatabase;
 
-beforeAll(() => {
+beforeAll(async () => {
   db = new FakeDatabase();
   const deps: ServerDependencies = {
     database: db as unknown as Database,
     store: new ContentStore('/tmp/soroverify-routes-test-store'),
     resolver,
     peerVerifiers: [],
+    maxActiveSubmissions: 1000,
   };
-  app = buildServer({ host: '127.0.0.1', port: 0, loggerEnabled: false }, deps);
+  app = await buildServer({ host: '127.0.0.1', port: 0, loggerEnabled: false }, deps);
 });
 
 beforeEach(() => {
@@ -387,14 +388,15 @@ describe('CORS_ALLOWED_ORIGINS restriction', () => {
   const ALLOWED = 'https://wallet.example.com, https://explorer.example.org';
   let restrictedApp: FastifyInstance;
 
-  beforeAll(() => {
-    restrictedApp = buildServer(
+  beforeAll(async () => {
+    restrictedApp = await buildServer(
       { host: '127.0.0.1', port: 0, loggerEnabled: false, corsAllowedOrigins: ALLOWED },
       {
         database: db as unknown as Database,
         store: new ContentStore('/tmp/soroverify-routes-cors-test-store'),
         resolver,
         peerVerifiers: [],
+        maxActiveSubmissions: 1000,
       },
     );
   });

@@ -48,8 +48,14 @@ class FakeDatabase {
   readonly calls: string[] = [];
   private readonly rows = new Map<string, Submission>();
 
-  async insertSubmission(input: NewSubmission): Promise<{ id: string }> {
-    this.calls.push('insertSubmission');
+  async insertSubmissionIfUnderCeiling(
+    input: NewSubmission,
+    maxActive: number,
+  ): Promise<{ id: string } | null> {
+    this.calls.push('insertSubmissionIfUnderCeiling');
+    if (this.countActive() >= maxActive) {
+      return null;
+    }
     const id = randomUUID();
     const now = new Date();
     this.rows.set(id, {
@@ -70,6 +76,20 @@ class FakeDatabase {
       updatedAt: now,
     });
     return { id };
+  }
+
+  async countActiveSubmissions(): Promise<number> {
+    this.calls.push('countActiveSubmissions');
+    return this.countActive();
+  }
+
+  private countActive(): number {
+    return [...this.rows.values()].filter(
+      (row) =>
+        row.status === 'running' ||
+        ((row.status === 'pending' || row.status === 'inconclusive') &&
+          row.attempts < row.maxAttempts),
+    ).length;
   }
 
   async getSubmission(id: string): Promise<Submission | null> {
@@ -100,15 +120,30 @@ class FakeDatabase {
 let app: FastifyInstance;
 let db: FakeDatabase;
 
-beforeAll(() => {
+beforeAll(async () => {
   db = new FakeDatabase();
   const deps: ServerDependencies = {
     database: db as unknown as Database,
     store: new ContentStore('/tmp/soroverify-ingest-test-store'),
     resolver: new Resolver({ rpcUrl: 'https://rpc.invalid' }),
     peerVerifiers: [],
+    maxActiveSubmissions: 1000,
   };
-  app = buildServer({ host: '127.0.0.1', port: 0, loggerEnabled: false }, deps);
+  // These tests exercise validation and injection resistance across dozens of
+  // POST /submissions calls in one Fastify instance; the production
+  // submissions rate limit (5/min, see src/index.ts) would start rejecting
+  // them partway through with 429, which is not what this file is testing.
+  // The rate limiter's own throttling behavior is covered by
+  // test/rateLimit.test.ts against the real production defaults.
+  app = await buildServer(
+    {
+      host: '127.0.0.1',
+      port: 0,
+      loggerEnabled: false,
+      submissionsRateLimitMax: 10_000,
+    },
+    deps,
+  );
 });
 
 beforeEach(() => {
@@ -252,7 +287,7 @@ describe('POST /submissions validation and injection resistance', () => {
       expect(typeof submissionId).toBe('string');
       expect(submissionId.length).toBeGreaterThan(0);
       // The only database work was the pending insert.
-      expect(db.calls).toEqual(['insertSubmission']);
+      expect(db.calls).toEqual(['insertSubmissionIfUnderCeiling']);
       // The row is readable back as a pending submission.
       const row = await db.getSubmission(submissionId);
       expect(row?.status).toBe('pending');
@@ -302,7 +337,7 @@ describe('POST /submissions validation and injection resistance', () => {
       expect(response.statusCode).toBe(202);
       // No claim/complete/retry/result transitions — those belong to the
       // asynchronously running job runner, not to the request.
-      expect(db.calls).toEqual(['insertSubmission']);
+      expect(db.calls).toEqual(['insertSubmissionIfUnderCeiling']);
       // No docker/git invocation happened during the request.
       expect(execFileMock).not.toHaveBeenCalled();
     });

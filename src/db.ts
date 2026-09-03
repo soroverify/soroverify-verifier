@@ -227,11 +227,46 @@ export class Database {
     `);
   }
 
-  /** Insert a new submission in 'pending' state. Returns its id. */
-  async insertSubmission(input: NewSubmission): Promise<{ id: string }> {
+  /**
+   * Count submissions that are not yet in a terminal state: currently
+   * 'running', or still eligible to be claimed again ('pending', or
+   * 'inconclusive' with retry budget left). Mirrors claimNextJob's WHERE
+   * clause plus 'running'. This is the service-wide backlog-plus-in-flight
+   * figure the active-submission ceiling (MAX_ACTIVE_SUBMISSIONS) is checked
+   * against.
+   */
+  async countActiveSubmissions(): Promise<number> {
+    const result = await this.pool.query<{ count: string }>(
+      `SELECT count(*) AS count FROM submissions
+        WHERE status = 'running'
+           OR (status IN ('pending','inconclusive') AND attempts < max_attempts)`,
+    );
+    return Number(result.rows[0]?.count ?? '0');
+  }
+
+  /**
+   * Insert a new submission in 'pending' state, but only if the active-
+   * submission ceiling has not already been reached. The count check and the
+   * insert run as one statement so two requests racing the same ceiling
+   * cannot both slip in past it in the common case (a residual, narrow race
+   * remains under concurrent snapshot isolation; acceptable for a resource
+   * guard rather than a strict accounting invariant, and far better than the
+   * unbounded backlog this replaces). Returns null when the ceiling is
+   * already met; the caller uses countActiveSubmissions() to report how full
+   * the queue is.
+   */
+  async insertSubmissionIfUnderCeiling(
+    input: NewSubmission,
+    maxActive: number,
+  ): Promise<{ id: string } | null> {
     const result = await this.pool.query<{ id: string }>(
       `INSERT INTO submissions (contract_id, wasm_hash, source_repo, source_rev, build_image, max_attempts)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       SELECT $1, $2, $3, $4, $5, $6
+        WHERE (
+          SELECT count(*) FROM submissions
+           WHERE status = 'running'
+              OR (status IN ('pending','inconclusive') AND attempts < max_attempts)
+        ) < $7
        RETURNING id`,
       [
         input.contractId,
@@ -240,13 +275,11 @@ export class Database {
         input.sourceRev,
         input.buildImage,
         input.maxAttempts ?? 3,
+        maxActive,
       ],
     );
     const row = result.rows[0];
-    if (row === undefined) {
-      throw new Error('insertSubmission returned no row');
-    }
-    return { id: row.id };
+    return row === undefined ? null : { id: row.id };
   }
 
   /** Fetch a submission by id, or null when it does not exist. */
